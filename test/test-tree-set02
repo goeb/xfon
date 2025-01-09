@@ -1,0 +1,7 @@
+#/bin/sh
+
+set -e
+
+cat "$srcdir"/set02/*.crt | ../xfon tree > tree-set02.out 2>&1
+
+diff tree-set02.out "$srcdir"/set02/tree.ref

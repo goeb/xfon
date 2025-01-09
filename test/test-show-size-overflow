@@ -1,0 +1,13 @@
+#!/bin/sh
+
+T=$(basename "$0")
+env printf "\x30\x88\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" > "$T.crt"
+../xfon show "$T.crt" > "$T.out" 2>&1
+rc=$?
+
+# Do the verifications
+set -e
+
+grep "Length of DER SEQUENCE overflow" "$T.out"
+
+test $rc = 1
