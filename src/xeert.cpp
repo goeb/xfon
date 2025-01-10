@@ -1,83 +1,86 @@
 
 #include <argp.h>
+#include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "config.h"
+#include "cli.h"
+#include "cmd_diff.h"
 
 const char *argp_program_version = PACKAGE_VERSION;
-static char doc[] = "xeert --  a tool to display information about certificates";
-static char args_doc[] = "CERTIFICATE ...";
-static struct argp_option options[] = {
-	{"verbose",  'v', 0,      0,  "Produce verbose output" },
-	{"quiet",    'q', 0,      0,  "Don't produce any output" },
-	{"silent",   's', 0,      OPTION_ALIAS },
-	{"output",   'o', "FILE", 0,  "Output to FILE instead of standard output" },
-	{ 0 }
-};
 
-struct arguments
+static void parse_cmd_grep(struct argp_state* state)
 {
-	char *args[2];  /* arg1 & arg2 */
-	int silent, verbose;
-	char *output_file;
-};
+    printf("parse_cmd_grep TODO\n");
+}
 
-static error_t parse_opt (int key, char *arg, struct argp_state *state)
+static void parse_cmd_show(struct argp_state* state)
 {
-	struct arguments *arguments =(struct arguments *) state->input;
+    printf("parse_cmd_show TODO\n");
+}
 
-	switch (key)
-		{
-		case 'q': case 's':
-			arguments->silent = 1;
-			break;
-		case 'v':
-			arguments->verbose = 1;
-			break;
-		case 'o':
-			arguments->output_file = arg;
-			break;
-		
-		case ARGP_KEY_ARG:
-			if (state->arg_num >= 2)
-				argp_usage(state); /* Too many arguments. */
-		
-			arguments->args[state->arg_num] = arg;
-		
-			break;
-		
-		case ARGP_KEY_END:
-			if (state->arg_num < 2)
-				argp_usage(state); /* Not enough arguments. */
-			break;
-		
-		default:
-			return ARGP_ERR_UNKNOWN;
-		}
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
+{
+    struct arguments *arguments = (struct arguments *)state->input;
+
+    switch (key) {
+    case 'h':
+        argp_state_help(state, state->out_stream, ARGP_HELP_STD_HELP);
+        break;
+    case ARGP_KEY_ARG:
+        assert(arg);
+        arguments->command = arg;
+        if (0 == strcmp(arg, "diff")) {
+            parse_cmd_diff(state);
+        } else if (0 == strcmp(arg, "grep")) {
+            parse_cmd_grep(state);
+        } else if (0 == strcmp(arg, "show")) {
+            parse_cmd_show(state);
+        } else {
+            argp_error(state, "Not a valid command: %s", arg);
+        }
+        break;
+    case ARGP_KEY_END:
+        if (arguments->command.empty()) {
+            argp_error(state, "Missing command");
+        }
+        break;
+    default:
+        return ARGP_ERR_UNKNOWN;
+    }
 	return 0;
 }
 
-static struct argp argp = { options, parse_opt, args_doc, doc };
+static char doc[] =
+    "\n"
+    "Display information about x509 certificates\n"
+    "\n"
+    "Supported commands:\n"
+    "  diff    Compare two certificates\n"
+    "  grep    Search for patterns in certificates\n"
+    "  show    Show contents of certificates\n"
+    "\n"
+    "Options:"
+    "\v"
+    "See 'xeert <command> -h' to read about a specific <command>."
+    ;
 
+static char args_doc[] = "<command> <args>";
+
+static struct argp_option options[] = {
+    { 0,  'h', 0, 0, NULL, -1 },
+    { 0 }
+};
+
+static struct argp argp = { options, parse_opt, args_doc, doc };
 
 int main(int argc, char **argv)
 {
 	struct arguments arguments;
-	/* Default values. */
-	arguments.silent = 0;
-	arguments.verbose = 0;
-	arguments.output_file = "-";
 
-	argp_parse(&argp, argc, argv, 0, 0, &arguments);
-
-	printf("ARG1 = %s\nARG2 = %s\nOUTPUT_FILE = %s\n"
-	      "VERBOSE = %s\nSILENT = %s\n",
-	       arguments.args[0], arguments.args[1],
-	       arguments.output_file,
-	       arguments.verbose ? "yes" : "no",
-	       arguments.silent ? "yes" : "no");
+    argp_parse(&argp, argc, argv, ARGP_IN_ORDER, 0, &arguments);
 
 	return 0;
-
 }
 
