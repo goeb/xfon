@@ -37,7 +37,7 @@ static error_t parse_opt(int key, char* arg, struct argp_state* state)
 }
 
 static struct argp_option options[] = {
-    { 0,  'h', 0, 0, "Same as --help", -1 },
+    { 0,  'h', 0, 0, 0, -1 },
     { 0 }
 };
 
@@ -50,23 +50,5 @@ static char doc[] =
 
 static char args_doc[] = "CERT1 CERT2";
 
-static struct argp argp = { options, parse_opt, args_doc, doc };
-
-void parse_cmd_diff(struct argp_state* state)
-{
-    struct arguments *arguments = (struct arguments *)state->input;
-
-    int argc = state->argc - state->next + 1;
-    char **argv = &state->argv[state->next - 1];
-    char *argv0 = argv[0];
-
-    std::string progname(state->name);
-    progname += " diff";
-    argv[0] = (char*)progname.c_str();
-
-    argp_parse(&argp, argc, argv, ARGP_IN_ORDER, &argc, arguments);
-
-    argv[0] = argv0;
-    state->next += argc - 1;
-    return;
-}
+/* Entry point for command line parsing */
+struct argp argp_diff = { options, parse_opt, args_doc, doc };
