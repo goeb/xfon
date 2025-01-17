@@ -68,15 +68,24 @@ static char args_doc[] = "CERT ...";
 /* Entry point for command line parsing */
 struct argp argp_show = { options, parse_opt, args_doc, doc };
 
-static void hexdump(BIO *out, const unsigned char *data, int length) {
+static void hexdump(BIO *out, const unsigned char *data, int length)
+{
     for (int i = 0; i < length; i++) {
         int err = BIO_printf(out, "%02X", data[i]);
         if (err <= 0) return;
     }
 }
 
+static void hexdump_line(BIO *out, const char *prefix, const unsigned char *data, int length)
+{
+    BIO_printf(out, "%s", prefix);
+    hexdump(out, data, length); // DER-encoded public key
+    BIO_printf(out, "\n");
+}
+
 /* x509v3 properties
  * ref: https://www.ietf.org/rfc/rfc2459.txt
+ * RFC 5280
  *
    Certificate  ::=  SEQUENCE  {
         tbsCertificate       TBSCertificate,
@@ -220,16 +229,81 @@ static int show_cert(const X509 *cert)
     BIO_printf(out, "\n");
 
     // tbsCertificate.subjectPublicKeyInfo.subjectPublicKey
-    BIO_printf(out, "publickey: ");
-    hexdump(out, pubkey_bytes, pubkey_length); // DER-encoded public key
-    BIO_printf(out, "\n");
+    hexdump_line(out, "publickey: ", pubkey_bytes, pubkey_length); // DER-encoded public key
 
     // tbsCertificate.issuerUniqueID
     // tbsCertificate.subjectUniqueID
+    const ASN1_BIT_STRING *issuer_uid = NULL;
+    const ASN1_BIT_STRING *subject_uid = NULL;
+    X509_get0_uids(cert, &issuer_uid, &subject_uid);
+    if (issuer_uid) {
+        hexdump_line(out, "issueruniqueid: ", issuer_uid->data, issuer_uid->length);
+    }
+    if (subject_uid) {
+        hexdump_line(out, "subjectuniqueid: ", subject_uid->data, subject_uid->length);
+    }
+
     // tbsCertificate.extensions
+    const STACK_OF(X509_EXTENSION) *extensions = X509_get0_extensions(cert);
+    if (extensions) {
+        int i;
+        for (i = 0; i < sk_X509_EXTENSION_num(extensions); i++) {
+            X509_EXTENSION *extension = sk_X509_EXTENSION_value(extensions, i);
+            if (!extension) continue;
+            // tbsCertificate.extensions.extnID
+            BIO_printf(out, "extensions[%d]:", i);
+            ASN1_OBJECT *obj = X509_EXTENSION_get_object(extension);
+            char numeric_oid[1024];
+            memset(numeric_oid, 0, sizeof(numeric_oid));
+            OBJ_obj2txt(numeric_oid, sizeof(numeric_oid)-1, obj, 1);
+            // Get the OID short name, in order to know which extension we are dealing with
+            int nid = OBJ_obj2nid(obj); // internal ref to openssl OID table
+            const char *openssl_short_name = OBJ_nid2sn(nid);
+            BIO_printf(out, " %s(%s)", numeric_oid, openssl_short_name);
+
+            // tbsCertificate.extensions.critical
+            int critical = X509_EXTENSION_get_critical(extension);
+            BIO_printf(out, " critical=%d ", critical);
+
+            // tbsCertificate.extensions.extnValue
+            if (0 == strcmp(openssl_short_name, "basicConstraints")) {
+                X509V3_EXT_print(out, extension, 0, 0);
+            } else if (0 == strcmp(openssl_short_name, "keyUsage")) {
+                // TODO: clarify OCTET STRING vs BIT STRING
+                // See: X509V3_EXT_print
+                const ASN1_OCTET_STRING *value = X509_EXTENSION_get_data(extension);
+                hexdump(out, value->data, value->length);
+                // TODO: decompose the bitstring (tag 03) to
+                // digitalSignature        (0),
+                // nonRepudiation          (1),
+                // keyEncipherment         (2),
+                // dataEncipherment        (3),
+                // keyAgreement            (4),
+                // keyCertSign             (5),
+                // cRLSign                 (6),
+                // encipherOnly            (7),
+                // decipherOnly            (8)
+                // See:
+                // STACK_OF(CONF_VALUE) *i2v_ASN1_BIT_STRING(X509V3_EXT_get_nid(NID_key_usage), value, NULL);
+            } else {
+                const ASN1_OCTET_STRING *value = X509_EXTENSION_get_data(extension);
+                hexdump(out, value->data, value->length);
+            }
+            BIO_printf(out, "\n");
+        }
+    }
 
     // signatureAlgorithm
     // signatureValue
+    const X509_ALGOR *signature_algo;
+    const ASN1_BIT_STRING *signature;
+    X509_get0_signature(&signature, &signature_algo, cert);
+    // TODO: use a different label for the 2 signaturealgorithm
+    // TODO: print signatureAlgorithm.parameters
+    BIO_printf(out, "signaturealgorithm: ");
+    i2a_ASN1_OBJECT(out, signature_algo->algorithm);
+    BIO_printf(out, "\n");
+    hexdump_line(out, "signature: ", signature->data, signature->length);
 
     BIO_free(out);
     return 0;
@@ -260,7 +334,7 @@ static int show_cert_file(const char *path)
         n_cert ++;
     }
     if (0 == n_cert) {
-        fprintf(stderr, "warning: file has no valid cetificate: '%s'\n", path);
+        fprintf(stderr, "warning: file has no valid certificate: '%s'\n", path);
     }
     ret = 0;
 error:
