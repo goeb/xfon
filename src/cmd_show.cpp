@@ -4,6 +4,8 @@
 #include <argp.h>
 #include <assert.h>
 #include <errno.h>
+#include <fstream>
+#include <iostream>
 #include <openssl/asn1.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
@@ -309,49 +311,133 @@ static int show_cert(const X509 *cert)
     return 0;
 }
 
-static int show_cert_file(const char *path)
+std::string base64_decode(const std::string &base64lines)
 {
-    BIO *bio;
+    fprintf(stderr, "get_pem_cert\n");
+    BIO *bio = BIO_new(BIO_s_mem());
+    BIO_write(bio, base64lines.data(), base64lines.size());
+    BIO *b64_bio = BIO_new(BIO_f_base64());
+    BIO_set_flags(b64_bio, BIO_FLAGS_BASE64_NO_NL); // Don't require newlines
+    BIO_push(b64_bio, bio);
+    char one_byte;
+    std::string result;
+    while (0 < BIO_read(b64_bio, &one_byte, 1)) { // Read byte-by-byte
+        result += one_byte;
+    } // Once we're done reading decoded data, BIO_read returns -1 even though there's no error
+
+    BIO_free_all(b64_bio); // free all BIO in chain
+    return result;
+}
+
+/* Read a PEM formatted certificate
+ *
+ * @first_bytes Bytes already read from the stream
+ * @input       Other bytes
+ *
+ * Returns:
+ *    Bytes of the DER encoded certificate
+ */
+std::string get_pem_cert(const std::string &first_bytes, std::istream &input)
+{
+    fprintf(stderr, "get_pem_cert\n");
+    std::string line;
+    std::getline(input, line);
+    // complete the line with the first bytes
+    line = first_bytes + line;
+    printf("line=%s\n", line.c_str());
+    std::string base64lines, base64lines_tmp;
+    if (line == "-----BEGIN CERTIFICATE-----") {
+        fprintf(stderr, "get_pem_cert: got BEGIN CERTIFICATE\n");
+
+        // get all line until END
+        while (getline(input, line)) {
+            if (line == "-----END CERTIFICATE-----") {
+                fprintf(stderr, "get_pem_cert: got END CERTIFICATE\n");
+                base64lines = base64lines_tmp;
+                break;
+            }
+            else base64lines_tmp += line;
+        }
+        if (input.fail()) {
+            fprintf(stderr, "get_pem_cert: input error\n");
+            return "";
+        }
+    } else {
+        fprintf(stderr, "get_pem_cert: invalid first line\n");
+        return "";
+    }
+    // convert from base64
+    std::string bytes = base64_decode(base64lines);
+    return bytes;
+}
+
+/* Read a PEM formatted certificate
+ *
+ * @first_bytes Bytes already read from the stream
+ * @input       Other bytes
+ *
+ * Returns:
+ *    Bytes of the DER encoded certificate
+ */
+std::string get_der_sequence(const std::string &first_bytes, std::istream &input)
+{
+    return "TODO get_der_sequence";
+}
+
+static int show_cert_file(std::istream &input, const char *filename)
+{
     int ret;
-    X509 *cert;
     int n_cert = 0;
 
-    if (path) {
-        bio = BIO_new_file(path, "r");
-    } else {
-        bio = BIO_new_fd(fileno(stdin), BIO_NOCLOSE);
-        path = "(stdin)";
+    fprintf(stderr, "show_cert_file: %s\n", filename);
+    while (1) {
+        char c;
+        if (!input.get(c)) {
+            // Cannot get a character
+            if (input.eof()) return 0;
+            fprintf(stderr, "Cannot get first character of '%s': %s\n", filename, strerror(errno));
+            return -1;
+        }
+        std::string der_bytes;
+        if (c == '-') der_bytes = get_pem_cert("-", input);
+        else if (c == 0x30) der_bytes = get_der_sequence("\x30", input);
+        else {
+            fprintf(stderr, "Unknown certificate format: %s\n", strerror(errno));
+            return -1;
+        }
+        // Put the DER bytes in a BIO memory buffer
+        BIO *bio = BIO_new(BIO_s_mem());
+        BIO_write(bio, der_bytes.data(), der_bytes.size());
+        X509 *cert = d2i_X509_bio(bio, NULL);
+        if (cert) {
+            show_cert(cert);
+            X509_free(cert);
+            n_cert ++;
+        }
+        BIO_free(bio);
     }
 
-    if (!bio) {
-        fprintf(stderr, "BIO_new_file: cannot open '%s': %s\n", path, strerror(errno));
-        ret = -1;
-        goto error;
-    }
-    while ((cert = PEM_read_bio_X509(bio, NULL, NULL, NULL))) {
-        show_cert(cert);
-        X509_free(cert);
-        n_cert ++;
-    }
     if (0 == n_cert) {
-        fprintf(stderr, "warning: file has no valid certificate: '%s'\n", path);
+        fprintf(stderr, "warning: file has no valid certificate: '%s'\n", filename);
     }
-    ret = 0;
-error:
-    BIO_free(bio);
-    return ret;
+    return 0;
 }
 
 int cmd_show(const std::list<std::string> &certificates_paths)
 {
     if (certificates_paths.size() == 0) {
         // Take certificates from stdin
-        fprintf(stderr, "cmd_show: stdin\n");
-        show_cert_file(NULL);
+        show_cert_file(std::cin, "(stdin)");
     } else {
         for (auto cert_path : certificates_paths) {
             fprintf(stderr, "cmd_show: %s\n", cert_path.c_str());
-            show_cert_file(cert_path.c_str());
+            std::ifstream ifs(cert_path, std::ifstream::in);
+            if (!ifs.good()) {
+                fprintf(stderr, "Cannot read from '%s': %s\n", cert_path.c_str(), strerror(errno));
+            } else {
+                int err = show_cert_file(ifs, cert_path.c_str());
+                ifs.close();
+            }
         }
     }
     return 0;
