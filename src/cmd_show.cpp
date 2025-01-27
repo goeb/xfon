@@ -6,15 +6,13 @@
 #include <errno.h>
 #include <fstream>
 #include <iostream>
-#include <openssl/asn1.h>
-#include <openssl/pem.h>
-#include <openssl/x509.h>
-#include <openssl/x509v3.h>
+#include <map>
 #include <stdio.h>
 #include <string.h>
 
 #include "cli.h"
 #include "cmd_show.h"
+#include "parse_x509.h"
 
 static error_t parse_opt(int key, char* arg, struct argp_state* state)
 {
@@ -69,21 +67,6 @@ static char args_doc[] = "CERT ...";
 
 /* Entry point for command line parsing */
 struct argp argp_show = { options, parse_opt, args_doc, doc };
-
-static void hexdump(BIO *out, const unsigned char *data, int length)
-{
-    for (int i = 0; i < length; i++) {
-        int err = BIO_printf(out, "%02X", data[i]);
-        if (err <= 0) return;
-    }
-}
-
-static void hexdump_line(BIO *out, const char *prefix, const unsigned char *data, int length)
-{
-    BIO_printf(out, "%s", prefix);
-    hexdump(out, data, length); // DER-encoded public key
-    BIO_printf(out, "\n");
-}
 
 /* x509v3 properties
  * ref: https://www.ietf.org/rfc/rfc2459.txt
@@ -179,155 +162,6 @@ subjectAltName
 
 */
 
-static int show_cert(const X509 *cert)
-{
-    BIO *out;
-    //int noerr; // 0=error, 1=success
-    out = BIO_new_fd(fileno(stdout), BIO_NOCLOSE);
-
-    // tbsCertificate.version
-    long version = X509_get_version(cert);
-    BIO_printf(out, "version: %ld\n", version);
-
-    // tbsCertificate.serialNumber
-    BIO_printf(out, "serial: ");
-    i2a_ASN1_INTEGER(out, X509_get0_serialNumber(cert)); // hexadecimal representation
-    BIO_printf(out, "\n");
-
-    // tbsCertificate.signature.algorithm
-    const X509_ALGOR *tbs_sigalg = X509_get0_tbs_sigalg(cert);
-    BIO_printf(out, "signaturealgorithm: ");
-    i2a_ASN1_OBJECT(out, tbs_sigalg->algorithm);
-    BIO_printf(out, "\n");
-    // TODO tbsCertificate.signature.parameters
-
-    // tbsCertificate.issuer
-    BIO_printf(out, "issuer: ");
-    X509_NAME_print_ex(out, X509_get_issuer_name(cert), 0, 0);
-    BIO_printf(out, "\n");
-
-    // tbsCertificate.validity.notBefore
-    BIO_printf(out, "notbefore: ");
-    ASN1_TIME_print_ex(out, X509_get0_notBefore(cert), ASN1_DTFLGS_ISO8601);
-    BIO_printf(out, "\n");
-    // tbsCertificate.validity.notAfter
-    BIO_printf(out, "notafter: ");
-    ASN1_TIME_print_ex(out, X509_get0_notAfter(cert), ASN1_DTFLGS_ISO8601);
-    BIO_printf(out, "\n");
-
-    // tbsCertificate.subject
-    BIO_printf(out, "subject: ");
-    X509_NAME_print_ex(out, X509_get_subject_name(cert), 0, 0);
-    BIO_printf(out, "\n");
-
-    // tbsCertificate.subjectPublicKeyInfo.algorithm
-    X509_PUBKEY *pubkey = X509_get_X509_PUBKEY(cert);
-    X509_ALGOR *pubkeyalgo;
-    const unsigned char *pubkey_bytes;
-    int pubkey_length;
-    X509_PUBKEY_get0_param(NULL, &pubkey_bytes, &pubkey_length, &pubkeyalgo, pubkey);
-    BIO_printf(out, "publickey: ");
-    i2a_ASN1_OBJECT(out, pubkeyalgo->algorithm);
-    BIO_printf(out, "\n");
-
-    // tbsCertificate.subjectPublicKeyInfo.subjectPublicKey
-    hexdump_line(out, "publickey: ", pubkey_bytes, pubkey_length); // DER-encoded public key
-
-    // tbsCertificate.issuerUniqueID
-    // tbsCertificate.subjectUniqueID
-    const ASN1_BIT_STRING *issuer_uid = NULL;
-    const ASN1_BIT_STRING *subject_uid = NULL;
-    X509_get0_uids(cert, &issuer_uid, &subject_uid);
-    if (issuer_uid) {
-        hexdump_line(out, "issueruniqueid: ", issuer_uid->data, issuer_uid->length);
-    }
-    if (subject_uid) {
-        hexdump_line(out, "subjectuniqueid: ", subject_uid->data, subject_uid->length);
-    }
-
-    // tbsCertificate.extensions
-    const STACK_OF(X509_EXTENSION) *extensions = X509_get0_extensions(cert);
-    if (extensions) {
-        int i;
-        for (i = 0; i < sk_X509_EXTENSION_num(extensions); i++) {
-            X509_EXTENSION *extension = sk_X509_EXTENSION_value(extensions, i);
-            if (!extension) continue;
-            // tbsCertificate.extensions.extnID
-            BIO_printf(out, "extensions[%d]:", i);
-            ASN1_OBJECT *obj = X509_EXTENSION_get_object(extension);
-            char numeric_oid[1024];
-            memset(numeric_oid, 0, sizeof(numeric_oid));
-            OBJ_obj2txt(numeric_oid, sizeof(numeric_oid)-1, obj, 1);
-            // Get the OID short name, in order to know which extension we are dealing with
-            int nid = OBJ_obj2nid(obj); // internal ref to openssl OID table
-            const char *openssl_short_name = OBJ_nid2sn(nid);
-            BIO_printf(out, " %s(%s)", numeric_oid, openssl_short_name);
-
-            // tbsCertificate.extensions.critical
-            int critical = X509_EXTENSION_get_critical(extension);
-            BIO_printf(out, " critical=%d ", critical);
-
-            // tbsCertificate.extensions.extnValue
-            if (0 == strcmp(openssl_short_name, "basicConstraints")) {
-                X509V3_EXT_print(out, extension, 0, 0);
-            } else if (0 == strcmp(openssl_short_name, "keyUsage")) {
-                // TODO: clarify OCTET STRING vs BIT STRING
-                // See: X509V3_EXT_print
-                const ASN1_OCTET_STRING *value = X509_EXTENSION_get_data(extension);
-                hexdump(out, value->data, value->length);
-                // TODO: decompose the bitstring (tag 03) to
-                // digitalSignature        (0),
-                // nonRepudiation          (1),
-                // keyEncipherment         (2),
-                // dataEncipherment        (3),
-                // keyAgreement            (4),
-                // keyCertSign             (5),
-                // cRLSign                 (6),
-                // encipherOnly            (7),
-                // decipherOnly            (8)
-                // See:
-                // STACK_OF(CONF_VALUE) *i2v_ASN1_BIT_STRING(X509V3_EXT_get_nid(NID_key_usage), value, NULL);
-            } else {
-                const ASN1_OCTET_STRING *value = X509_EXTENSION_get_data(extension);
-                hexdump(out, value->data, value->length);
-            }
-            BIO_printf(out, "\n");
-        }
-    }
-
-    // signatureAlgorithm
-    // signatureValue
-    const X509_ALGOR *signature_algo;
-    const ASN1_BIT_STRING *signature;
-    X509_get0_signature(&signature, &signature_algo, cert);
-    // TODO: use a different label for the 2 signaturealgorithm
-    // TODO: print signatureAlgorithm.parameters
-    BIO_printf(out, "signaturealgorithm: ");
-    i2a_ASN1_OBJECT(out, signature_algo->algorithm);
-    BIO_printf(out, "\n");
-    hexdump_line(out, "signature: ", signature->data, signature->length);
-
-    BIO_free(out);
-    return 0;
-}
-
-std::string base64_decode(const std::string &base64lines)
-{
-    fprintf(stderr, "get_pem_cert\n");
-    BIO *bio = BIO_new(BIO_s_mem());
-    BIO_write(bio, base64lines.data(), base64lines.size());
-    BIO *b64_bio = BIO_new(BIO_f_base64());
-    BIO_set_flags(b64_bio, BIO_FLAGS_BASE64_NO_NL); // Don't require newlines
-    BIO_push(b64_bio, bio);
-    char one_byte;
-    std::string result;
-    while (0 < BIO_read(b64_bio, &one_byte, 1)) { // Read byte-by-byte
-        result += one_byte;
-    } // Once we're done reading decoded data, BIO_read returns -1 even though there's no error
-
-    BIO_free_all(b64_bio); // free all BIO in chain
-    return result;
-}
 
 /* Read a PEM formatted certificate
  *
@@ -339,15 +173,12 @@ std::string get_pem_cert(std::istream &input)
     fprintf(stderr, "get_pem_cert\n");
     std::string line;
     std::getline(input, line);
-    printf("line=%s\n", line.c_str());
     std::string base64lines, base64lines_tmp;
     if (line == "-----BEGIN CERTIFICATE-----") {
-        fprintf(stderr, "get_pem_cert: got BEGIN CERTIFICATE\n");
 
         // get all line until END
         while (getline(input, line)) {
             if (line == "-----END CERTIFICATE-----") {
-                fprintf(stderr, "get_pem_cert: got END CERTIFICATE\n");
                 base64lines = base64lines_tmp;
                 break;
             }
@@ -427,8 +258,6 @@ std::string get_der_sequence(std::istream &input)
 
 static int show_cert_file(std::istream &input, const char *filename)
 {
-    int n_cert = 0;
-
     fprintf(stderr, "show_cert_file: %s\n", filename);
     while (1) {
         int c = input.peek();
@@ -449,21 +278,14 @@ static int show_cert_file(std::istream &input, const char *filename)
             fprintf(stderr, "Could not read PEM/DER from '%s'\n", filename);
             return -1;
         }
-        // Put the DER bytes in a BIO memory buffer
-        BIO *bio = BIO_new(BIO_s_mem());
-        BIO_write(bio, der_bytes.data(), der_bytes.size());
-        X509 *cert = d2i_X509_bio(bio, NULL);
-        if (cert) {
-            show_cert(cert);
-            X509_free(cert);
-            n_cert ++;
+
+        std::map<std::string, std::string> cert = parse_x509_der(der_bytes);
+
+        for (auto it: cert) {
+            printf("%s: %s\n", it.first.c_str(), it.second.c_str());
         }
-        BIO_free(bio);
     }
 
-    if (0 == n_cert) {
-        fprintf(stderr, "warning: file has no valid certificate: '%s'\n", filename);
-    }
     return 0;
 }
 
