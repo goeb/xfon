@@ -331,19 +331,14 @@ std::string base64_decode(const std::string &base64lines)
 
 /* Read a PEM formatted certificate
  *
- * @first_bytes Bytes already read from the stream
- * @input       Other bytes
- *
  * Returns:
  *    Bytes of the DER encoded certificate
  */
-std::string get_pem_cert(const std::string &first_bytes, std::istream &input)
+std::string get_pem_cert(std::istream &input)
 {
     fprintf(stderr, "get_pem_cert\n");
     std::string line;
     std::getline(input, line);
-    // complete the line with the first bytes
-    line = first_bytes + line;
     printf("line=%s\n", line.c_str());
     std::string base64lines, base64lines_tmp;
     if (line == "-----BEGIN CERTIFICATE-----") {
@@ -373,36 +368,85 @@ std::string get_pem_cert(const std::string &first_bytes, std::istream &input)
 
 /* Read a PEM formatted certificate
  *
- * @first_bytes Bytes already read from the stream
- * @input       Other bytes
- *
  * Returns:
  *    Bytes of the DER encoded certificate
  */
-std::string get_der_sequence(const std::string &first_bytes, std::istream &input)
+std::string get_der_sequence(std::istream &input)
 {
-    return "TODO get_der_sequence";
+    fprintf(stderr, "get_der_sequence\n");
+    std::string der_bytes;
+
+    // Get the length of the SEQUENCE (DER)
+    // - either the first byt, if < 128
+    // - or the following bytes (big endian)
+    char buffer[2];
+    input.read(buffer, 2);
+    if (!input.good()) {
+        fprintf(stderr, "Cannot get first 2 bytes of DER SEQUENCE: %s\n", strerror(errno));
+        return "";
+    }
+    der_bytes.append(buffer, 2);
+    int data_length = 0;
+    if (buffer[1] & 0x80) {
+        // Length encoded on multibytes, big-endian
+        int n_bytes = (unsigned char)buffer[1] & 0x7f;
+        for (int i=0; i<n_bytes; i++) {
+            char c;
+            input.read(&c, 1);
+            if (!input.good()) {
+                fprintf(stderr, "Cannot get next byte of DER SEQUENCE: %s\n", strerror(errno));
+                return "";
+            }
+            if (data_length > (INT_MAX >> 8 )) {
+                // unsigned integer overflow
+                fprintf(stderr, "Length of DER SEQUENCE overflow\n");
+                return "";
+            }
+            der_bytes.append(&c, 1);
+            data_length = (data_length << 8) + (unsigned char)c;
+        }
+        fprintf(stderr, "multi-byte length=0x%x\n", data_length);
+    } else {
+        data_length = (unsigned char)buffer[1];
+        fprintf(stderr, "single-byte length=0x%x\n", data_length);
+    }
+
+    // Read the SEQUENCE contents
+    char *contents = (char*)malloc(data_length);
+    input.read(contents, data_length);
+    if (!input.good()) {
+        fprintf(stderr, "Cannot get %d bytes of contents DER SEQUENCE: %s\n", data_length, strerror(errno));
+        free(contents);
+        return "";
+    }
+    der_bytes.append(contents, data_length);
+    free(contents);
+
+    return der_bytes;
 }
 
 static int show_cert_file(std::istream &input, const char *filename)
 {
-    int ret;
     int n_cert = 0;
 
     fprintf(stderr, "show_cert_file: %s\n", filename);
     while (1) {
-        char c;
-        if (!input.get(c)) {
+        int c = input.peek();
+        if (c == EOF) {
             // Cannot get a character
-            if (input.eof()) return 0;
+            if (input.eof()) break;
             fprintf(stderr, "Cannot get first character of '%s': %s\n", filename, strerror(errno));
             return -1;
         }
         std::string der_bytes;
-        if (c == '-') der_bytes = get_pem_cert("-", input);
-        else if (c == 0x30) der_bytes = get_der_sequence("\x30", input);
+        if (c == '-') der_bytes = get_pem_cert(input);
+        else if (c == 0x30) der_bytes = get_der_sequence(input);
         else {
-            fprintf(stderr, "Unknown certificate format: %s\n", strerror(errno));
+            fprintf(stderr, "Unknown certificate format: %s\n", filename);
+            return -1;
+        }
+        if (!der_bytes.size()) {
+            fprintf(stderr, "Could not read PEM/DER from '%s'\n", filename);
             return -1;
         }
         // Put the DER bytes in a BIO memory buffer
@@ -434,8 +478,10 @@ int cmd_show(const std::list<std::string> &certificates_paths)
             std::ifstream ifs(cert_path, std::ifstream::in);
             if (!ifs.good()) {
                 fprintf(stderr, "Cannot read from '%s': %s\n", cert_path.c_str(), strerror(errno));
+                break;
             } else {
                 int err = show_cert_file(ifs, cert_path.c_str());
+                if (err) break;
                 ifs.close();
             }
         }
