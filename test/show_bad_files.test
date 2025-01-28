@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -e  # Exit on first error
+
+# Only error cases tested here.
+# If an execution does not return an error, that's an error (hence exit 1).
+
+echo "" | ../xeert show && exit 1
+../xeert show no-such-file && exit 1
+touch empty-file
+../xeert show empty-file && exit 1
+
+cat << EOF > empty-pem-certificate
+-----BEGIN CERTIFICATE-----
+-----END CERTIFICATE-----
+EOF
+../xeert show empty-pem-certificate && exit 1
+
+# Malformed certificate
+printf "some junk" | ../xeert show empty-pem-certificate && exit 1
+
+# All tests raised an error. That's a success.
+exit 0

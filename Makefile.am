@@ -15,3 +15,4 @@ xeert_SOURCES = \
 xeert_CPPFLAGS = @OPENSSL_CFLAGS@
 xeert_LDADD = @OPENSSL_LIBS@
 
+SUBDIRS = test

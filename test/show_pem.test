@@ -1,0 +1,5 @@
+#!/bin/sh
+
+set -e
+../xeert show < $srcdir/cert.pem | grep "signatureAlgorithm: sha256WithRSAEncryption"
+../xeert show < $srcdir/cert.pem | grep "tbsCertificate.issuer: C=XX, ST=StateName, L=CityName, O=CompanyName, OU=CompanySectionName, CN=CommonNameOrHostname"

@@ -258,6 +258,7 @@ std::string get_der_sequence(std::istream &input)
 
 static int show_cert_file(std::istream &input, const char *filename)
 {
+    int n_cert = 0;
     fprintf(stderr, "show_cert_file: %s\n", filename);
     while (1) {
         int c = input.peek();
@@ -267,6 +268,7 @@ static int show_cert_file(std::istream &input, const char *filename)
             fprintf(stderr, "Cannot get first character of '%s': %s\n", filename, strerror(errno));
             return -1;
         }
+        n_cert++;
         std::string der_bytes;
         if (c == '-') der_bytes = get_pem_cert(input);
         else if (c == 0x30) der_bytes = get_der_sequence(input);
@@ -286,27 +288,34 @@ static int show_cert_file(std::istream &input, const char *filename)
         }
     }
 
+    if (0 == n_cert) {
+        fprintf(stderr, "No certificate read from '%s'\n", filename);
+        return -1;
+    }
     return 0;
 }
 
 int cmd_show(const std::list<std::string> &certificates_paths)
 {
+    int err = 0;
     if (certificates_paths.size() == 0) {
         // Take certificates from stdin
-        show_cert_file(std::cin, "(stdin)");
+        err = show_cert_file(std::cin, "(stdin)");
+
     } else {
         for (auto cert_path : certificates_paths) {
-            fprintf(stderr, "cmd_show: %s\n", cert_path.c_str());
             std::ifstream ifs(cert_path, std::ifstream::in);
             if (!ifs.good()) {
                 fprintf(stderr, "Cannot read from '%s': %s\n", cert_path.c_str(), strerror(errno));
+                err = 1;
                 break;
             } else {
-                int err = show_cert_file(ifs, cert_path.c_str());
+                err = show_cert_file(ifs, cert_path.c_str());
                 if (err) break;
                 ifs.close();
             }
         }
     }
+    if (err) return 1;
     return 0;
 }

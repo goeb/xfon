@@ -12,6 +12,6 @@ AC_PROG_CXX
 # Checks for external libraries.
 PKG_CHECK_MODULES(OPENSSL, openssl >= 3)
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile test/Makefile])
 AC_OUTPUT
 

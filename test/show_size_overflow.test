@@ -1,0 +1,10 @@
+#!/bin/sh
+
+set -e  # Exit on first error
+
+# Only error cases tested here.
+# If an execution cases does not return an error, that's an error (hence exit 1).
+
+../xeert show < $srcdir/cert-size-overflow.der && exit 1
+
+exit 0
