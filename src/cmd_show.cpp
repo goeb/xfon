@@ -6,7 +6,6 @@
 #include <errno.h>
 #include <fstream>
 #include <iostream>
-#include <map>
 #include <stdio.h>
 #include <string.h>
 
@@ -67,100 +66,6 @@ static char args_doc[] = "CERT ...";
 
 /* Entry point for command line parsing */
 struct argp argp_show = { options, parse_opt, args_doc, doc };
-
-/* x509v3 properties
- * ref: https://www.ietf.org/rfc/rfc2459.txt
- * RFC 5280
- *
-   Certificate  ::=  SEQUENCE  {
-        tbsCertificate       TBSCertificate,
-        signatureAlgorithm   AlgorithmIdentifier,
-        signatureValue       BIT STRING  }
-
-   TBSCertificate  ::=  SEQUENCE  {
-        version         [0]  EXPLICIT Version DEFAULT v1,
-        serialNumber         CertificateSerialNumber,
-        signature            AlgorithmIdentifier,
-        issuer               Name,
-        validity             Validity,
-        subject              Name,
-        subjectPublicKeyInfo SubjectPublicKeyInfo,
-        issuerUniqueID  [1]  IMPLICIT UniqueIdentifier OPTIONAL,
-                             -- If present, version shall be v2 or v3
-        subjectUniqueID [2]  IMPLICIT UniqueIdentifier OPTIONAL,
-                             -- If present, version shall be v2 or v3
-        extensions      [3]  EXPLICIT Extensions OPTIONAL
-                             -- If present, version shall be v3
-        }
-
-   Version  ::=  INTEGER  {  v1(0), v2(1), v3(2)  }
-
-   CertificateSerialNumber  ::=  INTEGER
-
-   Validity ::= SEQUENCE {
-        notBefore      Time,
-        notAfter       Time }
-
-   Time ::= CHOICE {
-        utcTime        UTCTime,
-        generalTime    GeneralizedTime }
-
-   UniqueIdentifier  ::=  BIT STRING
-
-   SubjectPublicKeyInfo  ::=  SEQUENCE  {
-        algorithm            AlgorithmIdentifier,
-        subjectPublicKey     BIT STRING  }
-
-   Extensions  ::=  SEQUENCE SIZE (1..MAX) OF Extension
-
-   Extension  ::=  SEQUENCE  {
-        extnID      OBJECT IDENTIFIER,
-        critical    BOOLEAN DEFAULT FALSE,
-        extnValue   OCTET STRING  } *
-
-Extensions
-   AuthorityKeyIdentifier ::= SEQUENCE {
-      keyIdentifier             [0] KeyIdentifier           OPTIONAL,
-      authorityCertIssuer       [1] GeneralNames            OPTIONAL,
-      authorityCertSerialNumber [2] CertificateSerialNumber OPTIONAL  }
-
-KeyIdentifier ::= OCTET STRING
-
-SubjectKeyIdentifier ::= KeyIdentifier
-
-      The keyCertSign bit is asserted when the subject public key is
-      used for verifying a signature on certificates.  This bit may only
-      be asserted in CA certificates.
-
-subjectAltName
-      id-ce-subjectAltName OBJECT IDENTIFIER ::=  { id-ce 17 }
-
-      SubjectAltName ::= GeneralNames
-
-      GeneralNames ::= SEQUENCE SIZE (1..MAX) OF GeneralName
-
-      GeneralName ::= CHOICE {
-           otherName                       [0]     OtherName,
-           rfc822Name                      [1]     IA5String,
-           dNSName                         [2]     IA5String,
-           x400Address                     [3]     ORAddress,
-           directoryName                   [4]     Name,
-           ediPartyName                    [5]     EDIPartyName,
-           uniformResourceIdentifier       [6]     IA5String,
-           iPAddress                       [7]     OCTET STRING,
-           registeredID                    [8]     OBJECT IDENTIFIER}
-
-      OtherName ::= SEQUENCE {
-           type-id    OBJECT IDENTIFIER,
-           value      [0] EXPLICIT ANY DEFINED BY type-id }
-
-      EDIPartyName ::= SEQUENCE {
-           nameAssigner            [0]     DirectoryString OPTIONAL,
-           partyName               [1]     DirectoryString }
-
-      IssuerAltName ::= GeneralNames
-
-*/
 
 
 /* Read a PEM formatted certificate
@@ -281,11 +186,18 @@ static int show_cert_file(std::istream &input, const char *filename)
             return -1;
         }
 
-        std::map<std::string, std::string> cert = parse_x509_der(der_bytes);
+        Certificate cert;
+        int err = x509_parse_der(der_bytes, cert);
+        if (err) return -1;
 
-        for (auto it: cert) {
+        for (auto it: cert.properties) {
             printf("%s: %s\n", it.first.c_str(), it.second.c_str());
         }
+        for (auto it: cert.extensions) {
+            printf("%s: %s\n", it.first.c_str(), it.second.c_str());
+        }
+
+        x509_free(cert);
     }
 
     if (0 == n_cert) {
