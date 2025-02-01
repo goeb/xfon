@@ -194,7 +194,8 @@ static int show_cert_file(std::istream &input, const char *filename)
             printf("%s: %s\n", it.first.c_str(), it.second.c_str());
         }
         for (auto it: cert.extensions) {
-            printf("%s: %s\n", it.first.c_str(), it.second.c_str());
+            printf("%s.critical: %d\n", it.first.c_str(), it.second.critical);
+            printf("%s.extnValue: %s\n", it.first.c_str(), hexdump(it.second.extn_value).c_str());
         }
 
         x509_free(cert);

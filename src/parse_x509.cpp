@@ -58,7 +58,7 @@
    Extension  ::=  SEQUENCE  {
         extnID      OBJECT IDENTIFIER,
         critical    BOOLEAN DEFAULT FALSE,
-        extnValue   OCTET STRING  } *
+        extnValue   OCTET STRING  }
 
 Extensions
    AuthorityKeyIdentifier ::= SEQUENCE {
@@ -105,7 +105,7 @@ subjectAltName
 */
 
 
-static std::string hexdump(const unsigned char *data, int length)
+std::string hexdump(const unsigned char *data, int length)
 {
     std::string result;
     char buffer[3];
@@ -115,6 +115,11 @@ static std::string hexdump(const unsigned char *data, int length)
     }
     return result;
 }
+std::string hexdump(const std::string &str)
+{
+    return hexdump((const unsigned char *)str.data(), str.size());
+}
+
 
 /**
  * @brief Convert a ASN1_INTEGER to a string
@@ -146,6 +151,36 @@ static std::string to_string(const ASN1_TYPE *stuff)
     return hexdump(data, length);
 }
 
+/**
+ * @brief Get the length of an DER-encoded ASN.1 type
+ * @param der_data
+ * @param der_length
+ * @return
+ */
+static int der_get_data_length(unsigned char *der_data, int der_length)
+{
+    int length = 0;
+    if (!der_data) return -1;
+    if (der_length < 2) return -1;
+    if (der_data[1] & 0x80) {
+        // Length encoded on multibytes, big-endian
+        int n_bytes = (unsigned char)der_data[1] & 0x7f;
+        if (n_bytes+2 > der_length) return -1;
+
+        for (int i=2; i<n_bytes+2; i++) {
+            if (length > (INT_MAX >> 8 )) {
+                // unsigned integer overflow
+                fprintf(stderr, "Length of DER SEQUENCE overflow\n");
+                return -1;
+            }
+            length = (length << 8) + der_data[i];
+        }
+    } else {
+        // length encoded on a single byte
+        length = der_data[1];
+    }
+    return length;
+}
 
 static std::string get_bio_mem_string(BIO *buffer) {
     char *ptr;
@@ -156,6 +191,53 @@ static std::string get_bio_mem_string(BIO *buffer) {
         return "";
     }
     return std::string(ptr, datalen);
+}
+
+#if 0
+static std::string decode_octet_string(unsigned char *der_data, int der_length)
+{
+    if (!der_data) return "<invalid-octet-string>";
+    if (der_length < 2) return "<invalid-octet-string>";
+    int length = der_get_data_length(der_data, der_length);
+    if (length < 0)...
+
+}
+#endif
+static void get_extensions(const X509 *cert, std::map<ObjectIdentifier, Extension> &extensions)
+{
+    const STACK_OF(X509_EXTENSION) *ptr_extensions = X509_get0_extensions(cert);
+    if (!ptr_extensions) return;
+
+    for (int i = 0; i < sk_X509_EXTENSION_num(ptr_extensions); i++) {
+        X509_EXTENSION *ptr_extension = sk_X509_EXTENSION_value(ptr_extensions, i);
+        if (!ptr_extension) continue;
+
+        // tbsCertificate.extensions.extnID
+        ASN1_OBJECT *obj = X509_EXTENSION_get_object(ptr_extension);
+        char numeric_oid[1024];
+        memset(numeric_oid, 0, sizeof(numeric_oid));
+        int err = OBJ_obj2txt(numeric_oid, sizeof(numeric_oid)-1, obj, 1);
+        if (err < 0) {
+            fprintf(stderr, "Cannot get extnID (tbsCertificate.extensions[%d])\n", i);
+        } else if (extensions.count(numeric_oid)) {
+            // OID already registered (a certificate should not have several extensions with the same OID)
+            fprintf(stderr, "extnID '%s' already registered (tbsCertificate.extensions[%d])\n", numeric_oid, i);
+        } else {
+            Extension ext;
+            // critical
+            ext.critical = X509_EXTENSION_get_critical(ptr_extension);
+
+            // extnValue
+            const ASN1_OCTET_STRING *extn_value = X509_EXTENSION_get_data(ptr_extension);
+            if (!extn_value) {
+                fprintf(stderr, "Cannot get extnValue (tbsCertificate.extensions[%d])\n", i);
+            } else {
+                // This octet string encodes another structure that depends on extnID
+                ext.extn_value = std::string((const char*)extn_value->data, extn_value->length);
+                extensions[numeric_oid] = ext;
+            }
+        }
+    }
 }
 
 static int populate_map(const X509 *cert, Certificate &result)
@@ -256,67 +338,7 @@ static int populate_map(const X509 *cert, Certificate &result)
     }
 
     // tbsCertificate.extensions
-    const STACK_OF(X509_EXTENSION) *extensions = X509_get0_extensions(cert);
-    if (extensions) {
-        int i;
-        for (i = 0; i < sk_X509_EXTENSION_num(extensions); i++) {
-            X509_EXTENSION *extension = sk_X509_EXTENSION_value(extensions, i);
-            if (!extension) continue;
-            // tbsCertificate.extensions.extnID
-            ASN1_OBJECT *obj = X509_EXTENSION_get_object(extension);
-            str_stream.str("");
-            char numeric_oid[1024];
-            memset(numeric_oid, 0, sizeof(numeric_oid));
-            err = OBJ_obj2txt(numeric_oid, sizeof(numeric_oid)-1, obj, 1);
-            if (err < 0) {
-                fprintf(stderr, "Error while serializing tbsCertificate.extensions[%d].extnID.\n", i);
-                str_stream << "invalid";
-            } else {
-                str_stream << numeric_oid;
-            }
-            // Get the OID short name, in order to know which extension we are dealing with
-            int nid = OBJ_obj2nid(obj); // internal ref to openssl OID table
-            const char *openssl_short_name = OBJ_nid2sn(nid);
-            if (openssl_short_name) str_stream << "(" << openssl_short_name << ")";
-            result.extensions.push_back(std::make_pair("tbsCertificate.extensions.extnID", str_stream.str()));
-
-            // tbsCertificate.extensions.critical
-            int critical = X509_EXTENSION_get_critical(extension);
-            result.extensions.push_back(std::make_pair("tbsCertificate.extensions.critical", critical?"TRUE":"FALSE"));
-
-            // tbsCertificate.extensions.extnValue
-            value = "";
-            if (!openssl_short_name) {
-                const ASN1_OCTET_STRING *ptr = X509_EXTENSION_get_data(extension);
-                if (ptr) value = hexdump(ptr->data, ptr->length);
-            } else if (0 == strcmp(openssl_short_name, "basicConstraints")) {
-                BIO_reset(buffer);
-                X509V3_EXT_print(buffer, extension, 0, 0);
-                value = get_bio_mem_string(buffer);
-            } else if (0 == strcmp(openssl_short_name, "keyUsage")) {
-                // TODO: clarify OCTET STRING vs BIT STRING
-                // See: X509V3_EXT_print
-                const ASN1_OCTET_STRING *ptr = X509_EXTENSION_get_data(extension);
-                if (ptr) value = hexdump(ptr->data, ptr->length);
-                // TODO: decompose the bitstring (tag 03) to
-                // digitalSignature        (0),
-                // nonRepudiation          (1),
-                // keyEncipherment         (2),
-                // dataEncipherment        (3),
-                // keyAgreement            (4),
-                // keyCertSign             (5),
-                // cRLSign                 (6),
-                // encipherOnly            (7),
-                // decipherOnly            (8)
-                // See:
-                // STACK_OF(CONF_VALUE) *i2v_ASN1_BIT_STRING(X509V3_EXT_get_nid(NID_key_usage), value, NULL);
-            } else {
-                const ASN1_OCTET_STRING *ptr = X509_EXTENSION_get_data(extension);
-                if (ptr) value = hexdump(ptr->data, ptr->length);
-            }
-            result.extensions.push_back(std::make_pair("tbsCertificate.extensions.extnValue", value));
-        }
-    }
+    get_extensions(cert, result.extensions);
 
     // signatureAlgorithm
     // signatureValue
