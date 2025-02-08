@@ -1,6 +1,7 @@
-#include <list>
 #include <map>
 #include <string>
+
+#include "data_model.h"
 
 typedef std::string PropertyName;
 typedef std::string PropertyValue;
@@ -8,7 +9,7 @@ typedef std::string ObjectIdentifier;
 
 struct Extension {
     bool critical;
-    std::string extn_value;
+    Value *extn_value;
 };
 
 struct Certificate {
@@ -16,6 +17,8 @@ struct Certificate {
     std::map<ObjectIdentifier, Extension> extensions;
     void *opaque;
 };
+
+std::string oid_get_name(const std::string &oid, bool shortname=false);
 
 std::string hexdump(const unsigned char *data, int length);
 std::string hexdump(const std::string &str);

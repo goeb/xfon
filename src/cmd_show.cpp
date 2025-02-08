@@ -11,7 +11,9 @@
 
 #include "cli.h"
 #include "cmd_show.h"
+#include "der_decode_x509.h" // for hexlify. TODO mv hexlify to other
 #include "parse_x509.h"
+
 
 static error_t parse_opt(int key, char* arg, struct argp_state* state)
 {
@@ -194,8 +196,11 @@ static int show_cert_file(std::istream &input, const char *filename)
             printf("%s: %s\n", it.first.c_str(), it.second.c_str());
         }
         for (auto it: cert.extensions) {
-            printf("%s.critical: %d\n", it.first.c_str(), it.second.critical);
-            printf("%s.extnValue: %s\n", it.first.c_str(), hexdump(it.second.extn_value).c_str());
+            std::string oidname = oid_get_name(it.first.c_str());
+            const char *longname_prefix = "tbsCertificate.extensions";
+            printf("%s.%s.critical: %d\n", longname_prefix, oidname.c_str(), it.second.critical);
+            printf("it.second.extn_value: type %d\n", it.second.extn_value->get_type());
+            printf("%s.%s.extnValue: %s\n", longname_prefix, oidname.c_str(), it.second.extn_value->to_string().c_str());
         }
 
         x509_free(cert);
