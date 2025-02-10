@@ -283,8 +283,12 @@ static void get_extensions(const X509 *cert, std::map<ObjectIdentifier, Extensio
                         continue; // ignore this malformed extension
                     }
                 } else if (oidname == "id-ce-authorityKeyIdentifier") {
-                    if (der_decode_x509_authority_key_identifier(der, i_start, der.size(), &ext.extn_value)) {
+                    if (der_decode_x509_authority_key_identifier(der, &ext.extn_value)) {
                         printf("xxx\n");
+                        continue; // ignore this malformed extension
+                    }
+                } else if (oidname == "id-ce-keyUsage") {
+                    if (der_decode_x509_key_usage(der, i_start, der.size(), &ext.extn_value)) {
                         continue; // ignore this malformed extension
                     }
                 } else {

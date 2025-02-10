@@ -158,6 +158,30 @@ static int der_decode_octet_string(const OctetString &der_bytes, size_t &i_start
     return 0;
 }
 
+/**
+ * @brief Get DER tag, length and value
+ * @param[in] der_bytes
+ * @param[out] tag
+ * @param[out] length
+ * @param[out] value
+ * @return number of bytes read, or -1 on error
+ */
+static int get_tag_length_value(const OctetString &der_bytes, int &tag, size_t &length, OctetString &value)
+{
+    long len_value;
+    int xclass;
+    const unsigned char *ptr = der_bytes.data();
+    // Get ASN1 tag (without class) and size of the object
+    int ret = ASN1_get_object(&ptr, &len_value, &tag, &xclass, der_bytes.size());
+    if (ret & 0x80) return -1;
+    if (len_value < 0) return -1;
+    size_t len_header = ptr - der_bytes.data();
+    if (len_value + len_header > der_bytes.size()) return -1;
+    length = len_value;
+    value = OctetString(der_bytes.data() + len_header, length);
+    return len_header + value.size();
+}
+
 /* Decode BasicConstraints (DER-encoded)
  *
  * BasicConstraints ::= SEQUENCE {
@@ -171,17 +195,16 @@ int der_decode_x509_basic_constraints(const OctetString &der_bytes, size_t &i_st
 
     printf("basic constraints: %s\n", hexlify(der_bytes).c_str());
 
-    const unsigned char *ptr = der_bytes.data() + i_start;
-    long len;
-    int tag, xclass;
-    // Get ASN1 tag (without class) and size of the object
-    int ret = ASN1_get_object(&ptr, &len, &tag, &xclass, i_end - i_start);
-    if (ret & 0x80) {
+    size_t length;
+    int tag;
+    OctetString fields;
+    int n_bytes = get_tag_length_value(der_bytes, tag, length, fields);
+    if (n_bytes < 0) {
         fprintf(stderr, "der_decode_x509_basic_constraints: cannot decode tag and length\n");
         return -1;
     }
     if (tag != V_ASN1_SEQUENCE) {
-        fprintf(stderr, "der_decode_x509_basic_constraints: not a sequence. tag=0x%X, class=0x%X\n", tag, xclass);
+        fprintf(stderr, "der_decode_x509_basic_constraints: not a sequence. tag=0x%X\n", tag);
         return -1;
     }
     // Possible cases here:
@@ -192,30 +215,27 @@ int der_decode_x509_basic_constraints(const OctetString &der_bytes, size_t &i_st
 
     Value *ca = NULL;
     Value *pathlenconstraint = NULL;
-    size_t i_next = ptr - der_bytes.data();
 
-    if (len == 0) {
+    if (fields.empty()) {
         // no cA, no pathLenConstraint
         ca = new Literal("false");
-    } else if (i_next < i_end) {
-        if (der_bytes[i_next] == V_ASN1_BOOLEAN) {
-            if (der_decode_boolean(der_bytes, i_next, i_next+3, &ca)) return -1;
+    } else {
+        size_t i_next = 0;
+        if (fields[0] == V_ASN1_BOOLEAN) {
+            if (der_decode_boolean(fields, i_next, 3, &ca)) return -1;
         } else {
             // cA not present. Use the default value
             ca = new Literal("false");
         }
         // Now decode pathLenConstraint
-        if (i_next >= i_start + len) {
+        if (i_next >= fields.size()) {
             // no pathLenConstraint
         } else {
             if (der_decode_integer(der_bytes, i_next, i_end, &pathlenconstraint)) {
-                delete ca;
+                if (ca) delete ca;
                 return -1;
             }
         }
-    } else {
-        fprintf(stderr, "der_decode_x509_basic_constraints: length mismatch: i_start=%lu, i_end=%lu, len=%ld\n", i_start, i_end, len);
-        return -1;
     }
 
     Object *obj = new Object();
@@ -242,10 +262,83 @@ int der_decode_x509_subject_key_identifier(const OctetString &der_bytes, size_t 
 }
 
 /**
+ * @brief der_decode_x509_general_names
+ * @param der_bytes
+ * @param out
+ * @return
+ *
+ * GeneralNames ::= SEQUENCE SIZE (1..MAX) OF GeneralName
+ *
+ * GeneralName ::= CHOICE {
+ *      otherName                 [0]  AnotherName,
+ *      rfc822Name                [1]  IA5String,
+ *      dNSName                   [2]  IA5String,
+ *      x400Address               [3]  ORAddress,
+ *      directoryName             [4]  Name,
+ *      ediPartyName              [5]  EDIPartyName,
+ *      uniformResourceIdentifier [6]  IA5String,
+ *      iPAddress                 [7]  OCTET STRING,
+ *      registeredID              [8]  OBJECT IDENTIFIER }
+ */
+int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
+{
+    fprintf(stderr, "der_decode_x509_general_names: %s\n", hexlify(der_bytes).c_str());
+    size_t length;
+    int tag;
+    OctetString value = der_bytes;
+    Object *obj = new Object();
+    while (value.size()) {
+        OctetString field;
+        int n_bytes = get_tag_length_value(der_bytes, tag, length, field);
+        if (n_bytes < 0) {
+            fprintf(stderr, "der_decode_x509_authority_key_identifier: cannot decode tag and length\n");
+            delete obj;
+            return -1;
+        }
+        fprintf(stderr, "der_decode_x509_general_names: tag=%d\n", tag);
+
+        switch (tag) {
+        case 0:
+            obj->items["otherName"] = new String(hexlify(field));
+            break;
+        case 1:
+            obj->items["rfc822Name"] = new String(hexlify(field));
+            break;
+        case 2:
+            obj->items["dNSName"] = new String(hexlify(field));
+            break;
+        case 3:
+            obj->items["x400Address"] = new String(hexlify(field));
+            break;
+        case 4:
+            obj->items["directoryName"] = new String(hexlify(field));
+            break;
+        case 5:
+            obj->items["ediPartyName"] = new String(hexlify(field));
+            break;
+        case 6:
+            obj->items["uniformResourceIdentifier"] = new String(hexlify(field));
+            break;
+        case 7:
+            obj->items["iPAddress"] = new String(hexlify(field));
+            break;
+        case 8:
+            obj->items["registeredID"] = new String(hexlify(field));
+            break;
+        default:
+            fprintf(stderr, "der_decode_x509_general_names: invalid tag 0x%x\n", tag);
+            delete obj;
+            return -1;
+        }
+        value.erase(0, n_bytes);
+    }
+    *out = obj;
+    return 0;
+}
+
+/**
  * @brief der_decode_x509_authority_key_identifier
  * @param der_bytes
- * @param i_start
- * @param i_end
  * @param out
  * @return 0 success, -1 error
  *
@@ -263,7 +356,73 @@ int der_decode_x509_subject_key_identifier(const OctetString &der_bytes, size_t 
  *        8201 00
  *
  */
-int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, size_t &i_start, size_t i_end, Value **out)
+int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, Value **out)
+{
+    //fprintf(stderr, "der_decode_x509_authority_key_identifier: %s\n", hexlify(der_bytes).c_str());
+    size_t length;
+    int tag;
+    OctetString value;
+    int n_bytes = get_tag_length_value(der_bytes, tag, length, value);
+    if (n_bytes < 0) {
+        fprintf(stderr, "der_decode_x509_authority_key_identifier: cannot decode tag and length\n");
+        return -1;
+    }
+    if (tag != V_ASN1_SEQUENCE) {
+        fprintf(stderr, "der_decode_x509_authority_key_identifier: not a sequence. tag=0x%X\n", tag);
+        return -1;
+    }
+    Object *obj = NULL;
+    Value *keyidentifier = NULL;
+    Value *authoritycertissuer = NULL;
+    Value *authoritycertserialnumber = NULL;
+
+    if (length == 0) {
+        // null parameter
+    } else {
+        while (value.size()) {
+            //fprintf(stderr, "value=%s\n", hexlify(value).c_str());
+            OctetString field;
+            int n_bytes = get_tag_length_value(value, tag, length, field);
+            if (n_bytes < 0) {
+                fprintf(stderr, "der_decode_x509_authority_key_identifier: cannot decode tag and length (2)\n");
+                return -1;
+            }
+            printf("tag=%d\n", tag);
+            if (0 == tag) {
+                keyidentifier = new String(hexlify(field));
+            } else if (1 == tag) {
+                der_decode_x509_general_names(field, &authoritycertissuer);
+            } else if (2 == tag) {
+                // rebuild a full ASN1 DER INTEGER with universal tag and length
+                OctetString der_integer = value;
+                der_integer[0] = 0x2; // set a universal tag for INTEGER
+                size_t i=0;
+                if (der_decode_integer(der_integer, i, der_integer.size(), &authoritycertserialnumber)) {
+                    goto error;
+                }
+            } else {
+                fprintf(stderr, "der_decode_x509_authority_key_identifier: invalid tag %d\n", tag);
+                return -1;
+            }
+            // Remove the consumed bytes
+            value.erase(0, n_bytes);
+        }
+    }
+
+    obj = new Object();
+    if (keyidentifier) obj->items["keyidentifier"] = keyidentifier;
+    if (authoritycertissuer) obj->items["authoritycertissuer"] = authoritycertissuer;
+    if (authoritycertserialnumber) obj->items["authoritycertserialnumber"] = authoritycertserialnumber;
+    *out = obj;
+    return 0;
+
+error:
+    if (keyidentifier) delete keyidentifier;
+    if (authoritycertserialnumber) delete authoritycertserialnumber;
+    return -1;
+}
+
+int der_decode_x509_key_usage(const OctetString &der_bytes, size_t &i_start, size_t i_end, Value **out)
 {
     assert(i_start < i_end);
     assert(i_end <= der_bytes.size());
@@ -274,63 +433,14 @@ int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, size_
     // Get ASN1 tag (without class) and size of the object
     int ret = ASN1_get_object(&ptr, &len, &tag, &xclass, i_end - i_start);
     if (ret & 0x80) {
-        fprintf(stderr, "der_decode_x509_authority_key_identifier: cannot decode tag and length\n");
+        fprintf(stderr, "der_decode_x509_key_usage: cannot decode tag and length\n");
         return -1;
     }
-    if (tag != V_ASN1_SEQUENCE) {
-        fprintf(stderr, "der_decode_x509_basic_constraints: not a sequence. tag=0x%X, class=0x%X\n", tag, xclass);
+    if (tag != V_ASN1_BIT_STRING) {
+        fprintf(stderr, "der_decode_x509_key_usage: not a BIT STRING. tag=0x%X, class=0x%X\n", tag, xclass);
         return -1;
     }
-    Object *obj = NULL;
-    Value *keyidentifier = NULL;
-    Value *authoritycertissuer = NULL;
-    Value *authoritycertserialnumber = NULL;
-    size_t i_next = ptr - der_bytes.data();
 
-    if (len == 0) {
-        // no parameter
-    } else {
-        while (i_next < i_end) {
-            int ret = ASN1_get_object(&ptr, &len, &tag, &xclass, i_end - i_next);
-            if (ret & 0x80) {
-                fprintf(stderr, "der_decode_x509_authority_key_identifier: cannot decode tag and length (2)\n");
-                return -1;
-            }
-            printf("tag=%d\n", tag);
-            if (0 == tag) {
-                keyidentifier = new String(hexlify(ptr, len));
-            } else if (1 == tag) {
-                // TODO der_decode_GeneralNames
-                authoritycertissuer = new String(hexlify(ptr, len));
-            } else if (2 == tag) {
-                // rebuild a full ASN1 DER INTEGER with universal tag and length
-                OctetString der_integer;
-                size_t taglen = ptr - (der_bytes.data()+i_next);
-                der_integer = OctetString(der_bytes.data()+i_next, len+taglen);
-                der_integer[0] = 0x2; // set a universal tag for INTEGER
-                size_t i=0;
-                if (der_decode_integer(der_integer, i, der_integer.size(), &authoritycertserialnumber)) {
-                    goto error;
-                }
-            } else {
-                fprintf(stderr, "der_decode_x509_authority_key_identifier: invlid tag %d\n", tag);
-                return -1;
-            }
-            ptr += len;
-            i_next = ptr - der_bytes.data();
-        }
-    }
-
-    obj = new Object();
-    if (keyidentifier) obj->items["keyidentifier"] = keyidentifier;
-    if (authoritycertissuer) obj->items["authoritycertissuer"] = authoritycertissuer;
-    if (authoritycertserialnumber) obj->items["authoritycertserialnumber"] = authoritycertserialnumber;
-    *out = obj;
-    i_start = i_end;
+    *out = new String(hexlify(ptr, len));
     return 0;
-
-error:
-    if (keyidentifier) delete keyidentifier;
-    if (authoritycertserialnumber) delete authoritycertserialnumber;
-    return -1;
 }
