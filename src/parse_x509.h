@@ -10,6 +10,14 @@ typedef std::string ObjectIdentifier;
 struct Extension {
     bool critical;
     Value *extn_value;
+    Extension() : critical(false), extn_value(0) {}
+    ~Extension() {
+        fprintf(stderr, "debug: ~Extension() extn_value=%p\n", extn_value);
+        if (extn_value) delete extn_value;
+    }
+    // Make it no copyable (because of the extn_value pointer that is not handled for copy)
+    //Extension(const Extension&) = delete;
+    //Extension& operator=(const Extension&) = delete;
 };
 
 struct Certificate {

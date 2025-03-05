@@ -192,16 +192,19 @@ static int show_cert_file(std::istream &input, const char *filename)
         int err = x509_parse_der(der_bytes, cert);
         if (err) return -1;
 
-        for (auto it: cert.properties) {
+        for (auto const &it: cert.properties) {
             printf("%s: %s\n", it.first.c_str(), it.second.c_str());
         }
-        for (auto it: cert.extensions) {
+        for (auto const &it: cert.extensions) {
             std::string oidname = oid_get_name(it.first.c_str());
             const char *longname_prefix = "tbsCertificate.extensions";
             printf("%s.%s.critical: %d\n", longname_prefix, oidname.c_str(), it.second.critical);
+            printf("it.second.extn_value=%p\n", it.second.extn_value);
             printf("it.second.extn_value: type %d\n", it.second.extn_value->get_type());
             printf("%s.%s.extnValue: %s\n", longname_prefix, oidname.c_str(), it.second.extn_value->to_string().c_str());
+            printf("debug: xxxxxxx\n");
         }
+        printf("debug: yyyy\n");
 
         x509_free(cert);
     }

@@ -2,6 +2,7 @@
 /* Parse x509 implementation using openssl (libcrypto)
  */
 
+#include <assert.h>
 #include <sstream>
 #include <openssl/asn1.h>
 #include <openssl/pem.h>
@@ -17,8 +18,6 @@ struct Oid {
     const char *short_name;   // eg: basicConstraints
 
 };
-
-
 
 static const Oid OID_NAMES[] = {
     { "2.5.29.14", "id-ce-subjectKeyIdentifier", NULL },
@@ -228,17 +227,6 @@ static int der_get_data_length(unsigned char *der_data, int der_length)
     return length;
 }
 
-static std::string get_bio_mem_string(BIO *buffer) {
-    char *ptr;
-    long datalen = BIO_get_mem_data(buffer, &ptr);
-    if (datalen < 0 || !ptr) {
-        // error
-        fprintf(stderr, "BIO_get_mem_data error\n");
-        return "";
-    }
-    return std::string(ptr, datalen);
-}
-
 static void get_extensions(const X509 *cert, std::map<ObjectIdentifier, Extension> &extensions)
 {
     const STACK_OF(X509_EXTENSION) *ptr_extensions = X509_get0_extensions(cert);
@@ -259,42 +247,47 @@ static void get_extensions(const X509 *cert, std::map<ObjectIdentifier, Extensio
             // OID already registered (a certificate should not have several extensions with the same OID)
             fprintf(stderr, "extnID '%s' already registered (tbsCertificate.extensions[%d])\n", numeric_oid, i);
         } else {
-            Extension ext;
             // critical
-            ext.critical = X509_EXTENSION_get_critical(ptr_extension);
+            bool critical = X509_EXTENSION_get_critical(ptr_extension);
+            Value *extn_value = NULL;
 
             // extnValue
-            const ASN1_OCTET_STRING *extn_value = X509_EXTENSION_get_data(ptr_extension);
+            const ASN1_OCTET_STRING *asn1_extn_value = X509_EXTENSION_get_data(ptr_extension);
 
-            if (!extn_value) {
+            if (!asn1_extn_value) {
                 fprintf(stderr, "Cannot get extnValue (tbsCertificate.extensions[%d])\n", i);
             } else {
                 // This octet string encodes another structure that depends on extnID
                 // XXXX decode according to OID
-                OctetString der = OctetString(extn_value->data, extn_value->length);
+                OctetString der = OctetString(asn1_extn_value->data, asn1_extn_value->length);
                 size_t i_start = 0;
                 std::string oidname = oid_get_name(numeric_oid);
                 if (oidname == "id-ce-basicConstraints") {
-                    if (der_decode_x509_basic_constraints(der, i_start, der.size(), &ext.extn_value)) {
+                    if (der_decode_x509_basic_constraints(der, i_start, der.size(), &extn_value)) {
                         continue; // ignore this malformed extension
                     }
                 } else if (oidname == "id-ce-subjectKeyIdentifier") {
-                    if (der_decode_x509_subject_key_identifier(der, i_start, der.size(), &ext.extn_value)) {
+                    if (der_decode_x509_subject_key_identifier(der, i_start, der.size(), &extn_value)) {
                         continue; // ignore this malformed extension
                     }
                 } else if (oidname == "id-ce-authorityKeyIdentifier") {
-                    if (der_decode_x509_authority_key_identifier(der, &ext.extn_value)) {
+                    if (der_decode_x509_authority_key_identifier(der, &extn_value)) {
                         printf("xxx\n");
                         continue; // ignore this malformed extension
                     }
                 } else if (oidname == "id-ce-keyUsage") {
-                    if (der_decode_x509_key_usage(der, i_start, der.size(), &ext.extn_value)) {
+                    if (der_decode_x509_key_usage(der, i_start, der.size(), &extn_value)) {
                         continue; // ignore this malformed extension
                     }
                 } else {
-                    ext.extn_value = new String(hexlify(extn_value->data, extn_value->length));
+                    extn_value = new String(hexlify(asn1_extn_value->data, asn1_extn_value->length));
                 }
-                extensions[numeric_oid] = ext;
+                assert(extn_value);
+                // insert the item
+                extensions[numeric_oid] = Extension();
+                extensions[numeric_oid].critical = critical;
+                fprintf(stderr, "debug: extensions[%s].extn_value=%p\n", numeric_oid, extn_value);
+                extensions[numeric_oid].extn_value = extn_value;
             }
         }
     }
@@ -448,8 +441,11 @@ int x509_parse_der(const std::string &der_bytes, Certificate &cert)
 
 void x509_free(Certificate &cert)
 {
+    printf("debug: x509_free: cert.properties.clear())\n");
     cert.properties.clear();
+    printf("debug: x509_free: cert.extensions.clear())\n");
     cert.extensions.clear();
+    printf("debug: x509_free: X509_free(opaque)\n");
     X509_free((X509 *)cert.opaque);
 }
 

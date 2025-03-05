@@ -2,6 +2,7 @@
 #include <climits>
 #include <openssl/asn1.h>
 #include <openssl/types.h>
+#include <openssl/x509.h>
 #include <string>
 
 #include "der_decode_x509.h"
@@ -143,9 +144,9 @@ static int der_decode_boolean(const OctetString &der_bytes, size_t &i_start, siz
  */
 static int der_decode_octet_string(const OctetString &der_bytes, size_t &i_start, size_t i_end, Value **out)
 {
+    fprintf(stderr, "der_decode_octet_string\n");
     assert(i_start < i_end);
     assert(i_end <= der_bytes.size());
-    std::string integer_string;
     const unsigned char *ptr = der_bytes.data()+i_start;
     ASN1_INTEGER *octetstring = d2i_ASN1_OCTET_STRING(NULL, &ptr, i_end - i_start);
     if (!octetstring) {
@@ -154,6 +155,7 @@ static int der_decode_octet_string(const OctetString &der_bytes, size_t &i_start
     }
     i_start = ptr - der_bytes.data(); // move the index forward to consume the bytes
     *out = new String(hexlify(octetstring->data, octetstring->length));
+    fprintf(stderr, "debug: der_decode_octet_string: *out=%p\n", *out);
     ASN1_OCTET_STRING_free(octetstring);
     return 0;
 }
@@ -261,6 +263,38 @@ int der_decode_x509_subject_key_identifier(const OctetString &der_bytes, size_t 
     return der_decode_octet_string(der_bytes, i_start, i_end, out);
 }
 
+std::string get_bio_mem_string(BIO *buffer)
+{
+    char *ptr;
+    long datalen = BIO_get_mem_data(buffer, &ptr);
+    if (datalen < 0 || !ptr) {
+        fprintf(stderr, "BIO_get_mem_data error\n");
+        return "";
+    }
+    return std::string(ptr, datalen);
+}
+
+static int der_decode_x509_name(const OctetString &der_bytes, Value **out)
+{
+    int ret = 0;
+    *out = NULL;
+    const unsigned char *ptr = der_bytes.data();
+    X509_NAME *name = d2i_X509_NAME(NULL, &ptr, der_bytes.size());
+    if (!name) {
+        fprintf(stderr, "der_decode_x509_name: error while parsing %s\n", hexlify(der_bytes).c_str());
+        return -1;
+    }
+    BIO *buffer = BIO_new(BIO_s_mem());
+    int err = X509_NAME_print_ex(buffer, name, 0, 0);
+    if (err < 0) {
+        fprintf(stderr, "der_decode_x509_name: error while converting %s\n", hexlify(der_bytes).c_str());
+        ret = -1;
+    } else *out = new String(get_bio_mem_string(buffer));
+
+    X509_NAME_free(name);
+    return ret;
+}
+
 /**
  * @brief der_decode_x509_general_names
  * @param der_bytes
@@ -311,7 +345,14 @@ int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
             obj->items["x400Address"] = new String(hexlify(field));
             break;
         case 4:
-            obj->items["directoryName"] = new String(hexlify(field));
+        {
+            Value *name = NULL;
+            int err = der_decode_x509_name(field, &name);
+            if (!err) {
+                fprintf(stderr, "der_decode_x509_name() -> name=%p\n", name);
+                obj->items["directoryName"] = name;
+            }
+        }
             break;
         case 5:
             obj->items["ediPartyName"] = new String(hexlify(field));
@@ -358,7 +399,7 @@ int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
  */
 int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, Value **out)
 {
-    //fprintf(stderr, "der_decode_x509_authority_key_identifier: %s\n", hexlify(der_bytes).c_str());
+    fprintf(stderr, "der_decode_x509_authority_key_identifier: %s\n", hexlify(der_bytes).c_str());
     size_t length;
     int tag;
     OctetString value;
@@ -380,7 +421,7 @@ int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, Value
         // null parameter
     } else {
         while (value.size()) {
-            //fprintf(stderr, "value=%s\n", hexlify(value).c_str());
+            fprintf(stderr, "value=%s\n", hexlify(value).c_str());
             OctetString field;
             int n_bytes = get_tag_length_value(value, tag, length, field);
             if (n_bytes < 0) {

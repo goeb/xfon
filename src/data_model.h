@@ -15,19 +15,19 @@ enum ValueType {
 
 class Value {
 public:
-    virtual enum ValueType get_type() = 0;
-    virtual std::string to_string() = 0;
-    virtual ~Value() {};
+    virtual enum ValueType get_type() const = 0;
+    virtual std::string to_string() const = 0;
+    virtual ~Value() {}
 };
 
 class Array : public Value {
 public:
-    enum ValueType get_type() { return V_ARRAY; }
+    enum ValueType get_type() const { return V_ARRAY; }
     std::list<Value*> items;
     ~Array() { for (auto i: items) delete i; }
-    std::string to_string() {
+    std::string to_string() const {
         std::string result;
-        for (auto i: items) {
+        for (auto const &i: items) {
             if (!result.empty()) result += ",";
             result += i->to_string();
         }
@@ -40,18 +40,21 @@ public:
 class Number : public Value, std::string {
 public:
     Number(const std::string &val) : std::string(val) {}
-    enum ValueType get_type() { return V_NUMBER; }
-    std::string to_string() { return std::string(this->data(), this->size()); }
+    enum ValueType get_type() const { return V_NUMBER; }
+    std::string to_string() const { return std::string(this->data(), this->size()); }
 };
 
 class Object : public Value {
 public:
-    enum ValueType get_type() { return V_OBJECT; }
+    enum ValueType get_type() const { return V_OBJECT; }
     std::map<std::string, Value*> items;
-    ~Object() { for (auto i: items) delete i.second; }
-    std::string to_string() {
+    ~Object() { for (auto i: items) {
+            fprintf(stderr, "debug: ~Object(): delete i.second=%p\n", i.second);
+            delete i.second; }
+    }
+    std::string to_string() const {
         std::string result;
-        for (auto i: items) {
+        for (auto const &i: items) {
             if (!result.empty()) result += ",";
             result += i.first + ":" + i.second->to_string();
         }
@@ -61,18 +64,20 @@ public:
     }
 };
 
-class String : public Value, std::string {
+class String : public Value {
+private:
+    std::string value;
 public:
-    String(const std::string &val) : std::string(val) {}
-    enum ValueType get_type() { return V_STRING; }
-    std::string to_string() { return std::string(this->data(), this->size()); }
+    String(const std::string &val) : value(val) {}
+    enum ValueType get_type() const { return V_STRING; }
+    std::string to_string() const { return std::string(this->value.data(), this->value.size()); }
 };
 
 class Literal : public Value, std::string {
 public:
     Literal(const std::string &val) : std::string(val) {}
-    enum ValueType get_type() { return V_LITERAL; }
-    std::string to_string() { return std::string(this->data(), this->size()); }
+    enum ValueType get_type() const { return V_LITERAL; }
+    std::string to_string() const { return std::string(this->data(), this->size()); }
 };
 
 #if 0
