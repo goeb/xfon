@@ -13,6 +13,12 @@ enum ValueType {
     V_LITERAL
 };
 
+/**
+ * @brief The Value class
+ *
+ * Abstract class used for having a composite value
+ * containing child composite values.
+ */
 class Value {
 public:
     virtual enum ValueType get_type() const = 0;
@@ -20,75 +26,52 @@ public:
     virtual ~Value() {}
 };
 
+/**
+ * @brief Array of values [ value, ... ]
+ */
 class Array : public Value {
 public:
-    enum ValueType get_type() const { return V_ARRAY; }
+    inline enum ValueType get_type() const { return V_ARRAY; }
     std::list<Value*> items;
-    ~Array() { for (auto i: items) delete i; }
-    std::string to_string() const {
-        std::string result;
-        for (auto const &i: items) {
-            if (!result.empty()) result += ",";
-            result += i->to_string();
-        }
-        result.insert(0, "[");
-        result += "]";
-        return result;
-    }
+    ~Array();
+    std::string to_string() const;
 };
 
-class Number : public Value, std::string {
-public:
-    Number(const std::string &val) : std::string(val) {}
-    enum ValueType get_type() const { return V_NUMBER; }
-    std::string to_string() const { return std::string(this->data(), this->size()); }
-};
-
+/**
+ * @brief Hash table of values { key: value, ... }
+ * "Object" here refers to the JSON definition of "Object".
+ */
 class Object : public Value {
 public:
     enum ValueType get_type() const { return V_OBJECT; }
     std::map<std::string, Value*> items;
-    ~Object() { for (auto i: items) {
-            fprintf(stderr, "debug: ~Object(): delete i.second=%p\n", i.second);
-            delete i.second; }
-    }
-    std::string to_string() const {
-        std::string result;
-        for (auto const &i: items) {
-            if (!result.empty()) result += ",";
-            result += i.first + ":" + i.second->to_string();
-        }
-        result.insert(0, "{");
-        result += "}";
-        return result;
-    }
+    ~Object();
+    std::string to_string() const;
 };
 
-class String : public Value {
-private:
-    std::string value;
+class GenericString : public Value, std::string {
 public:
-    String(const std::string &val) : value(val) {}
-    enum ValueType get_type() const { return V_STRING; }
-    std::string to_string() const { return std::string(this->value.data(), this->value.size()); }
+    virtual enum ValueType get_type() const = 0;
+    GenericString(const std::string &val) : std::string(val) {}
+    virtual std::string to_string() const;
 };
 
-class Literal : public Value, std::string {
+class Number : public GenericString {
 public:
-    Literal(const std::string &val) : std::string(val) {}
+    inline enum ValueType get_type() const { return V_NUMBER; }
+    Number(const std::string &val) : GenericString(val) {}
+};
+
+class String : public GenericString {
+public:
+    inline enum ValueType get_type() const { return V_STRING; }
+    String(const std::string &val) : GenericString(val) {}
+};
+
+class Literal : public GenericString {
+public:
+    Literal(const std::string &val) : GenericString(val) {}
     enum ValueType get_type() const { return V_LITERAL; }
-    std::string to_string() const { return std::string(this->data(), this->size()); }
 };
-
-#if 0
-int main()
-{
-    Object root;
-
-    root.items["#"] = new Number("-123");
-    root.items["x"] = new Literal("null");
-    root.items["children"] = new Array();
-}
-#endif
 
 #endif
