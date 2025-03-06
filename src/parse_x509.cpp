@@ -9,50 +9,9 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
-#include "parse_x509.h"
 #include "der_decode_x509.h"
-
-struct Oid {
-    const char *oid;          // eg: 2.5.29.19
-    const char *long_name;    // eg: id-ce-basicConstraints
-    const char *short_name;   // eg: basicConstraints
-
-};
-
-static const Oid OID_NAMES[] = {
-    { "2.5.29.14", "id-ce-subjectKeyIdentifier", NULL },
-    { "2.5.29.15", "id-ce-keyUsage", NULL },
-    { "2.5.29.16", "id-ce-privateKeyUsagePeriod", NULL },
-    { "2.5.29.17", "id-ce-subjectAltName", NULL },
-    { "2.5.29.18", "id-ce-issuerAltName", NULL },
-    { "2.5.29.19", "id-ce-basicConstraints", NULL },
-    { "2.5.29.20", "id-ce-cRLNumber", NULL },
-    { "2.5.29.21", "id-ce-reasonCode", NULL },
-    { "2.5.29.22", "id-ce-instructionCode", NULL },
-    { "2.5.29.23", "id-ce-invalidityDate", NULL },
-    { "2.5.29.24", "id-ce-issuingDistributionPoint", NULL },
-    { "2.5.29.27", "id-ce-deltaCRLIndicator", NULL },
-    { "2.5.29.28", "id-ce-issuingDistributionPoint", NULL },
-    { "2.5.29.29", "id-ce-certificateIssuer", NULL },
-    { "2.5.29.30", "id-ce-nameConstraints", NULL },
-    { "2.5.29.31", "id-ce-cRLDistributionPoints", NULL },
-    { "2.5.29.32", "id-ce-certificatePolicies", NULL },
-    { "2.5.29.33", "id-ce-policyMappings", NULL },
-    { "2.5.29.35", "id-ce-authorityKeyIdentifier", NULL },
-    { "2.5.29.36", "id-ce-policyConstraints", NULL },
-    { "2.5.29.37", "id-ce-extKeyUsage", NULL },
-    { NULL, NULL, NULL }
-};
-
-std::string oid_get_name(const std::string &oid, bool shortname)
-{
-    const struct Oid *ptr_oid = OID_NAMES;
-    while (ptr_oid->oid) {
-        if (oid == ptr_oid->oid) return shortname?ptr_oid->short_name:ptr_oid->long_name;
-        ptr_oid++;
-    }
-    return oid;
-}
+#include "oid_name.h"
+#include "parse_x509.h"
 
 /* x509v3 properties
  * ref: https://www.ietf.org/rfc/rfc2459.txt
@@ -149,23 +108,6 @@ subjectAltName
 
 */
 
-
-std::string hexdump(const unsigned char *data, int length)
-{
-    std::string result;
-    char buffer[3];
-    for (int i = 0; i < length; i++) {
-        sprintf(buffer, "%02X", data[i]);
-        result += buffer;
-    }
-    return result;
-}
-std::string hexdump(const std::string &str)
-{
-    return hexdump((const unsigned char *)str.data(), str.size());
-}
-
-
 /**
  * @brief Convert a ASN1_INTEGER to a string
  * @param number
@@ -177,7 +119,7 @@ static std::string to_string(const ASN1_INTEGER *number)
     if (!number) return "";
     if (number->type & V_ASN1_NEG) result = "-"; // negative value
     if (!number->length) result += "00";
-    else result += hexdump(number->data, number->length);
+    else result += hexlify(number->data, number->length);
     return result;
 }
 
@@ -193,7 +135,7 @@ static std::string to_string(const ASN1_TYPE *stuff)
     }
     const unsigned char *data = ASN1_STRING_get0_data(stuff->value.octet_string);
     int length = ASN1_STRING_length(stuff->value.octet_string);
-    return hexdump(data, length);
+    return hexlify(data, length);
 }
 
 /**
@@ -376,7 +318,7 @@ static int populate_map(const X509 *cert, Certificate &result)
     result.properties["tbsCertificate.subjectPublicKeyInfo.algorithm"] = value;
 
     // tbsCertificate.subjectPublicKeyInfo.subjectPublicKey
-    result.properties["tbsCertificate.subjectPublicKeyInfo.subjectPublicKey"] = hexdump(pubkey_bytes, pubkey_length); // DER-encoded public key
+    result.properties["tbsCertificate.subjectPublicKeyInfo.subjectPublicKey"] = hexlify(pubkey_bytes, pubkey_length); // DER-encoded public key
 
     // tbsCertificate.issuerUniqueID
     // tbsCertificate.subjectUniqueID
@@ -384,10 +326,10 @@ static int populate_map(const X509 *cert, Certificate &result)
     const ASN1_BIT_STRING *subject_uid = NULL;
     X509_get0_uids(cert, &issuer_uid, &subject_uid);
     if (issuer_uid) {
-        result.properties["tbsCertificate.issuerUniqueID"] = hexdump(issuer_uid->data, issuer_uid->length);
+        result.properties["tbsCertificate.issuerUniqueID"] = hexlify(issuer_uid->data, issuer_uid->length);
     }
     if (subject_uid) {
-        result.properties["tbsCertificate.subjectUniqueID"] = hexdump(subject_uid->data, subject_uid->length);
+        result.properties["tbsCertificate.subjectUniqueID"] = hexlify(subject_uid->data, subject_uid->length);
     }
 
     // tbsCertificate.extensions
@@ -407,7 +349,7 @@ static int populate_map(const X509 *cert, Certificate &result)
         value = "";
     } else value = get_bio_mem_string(buffer);
     result.properties["signatureAlgorithm"] = value;
-    result.properties["signatureValue"] = hexdump(signature->data, signature->length);
+    result.properties["signatureValue"] = hexlify(signature->data, signature->length);
 
     BIO_free(buffer);
     return 0;
@@ -441,11 +383,8 @@ int x509_parse_der(const std::string &der_bytes, Certificate &cert)
 
 void x509_free(Certificate &cert)
 {
-    printf("debug: x509_free: cert.properties.clear())\n");
     cert.properties.clear();
-    printf("debug: x509_free: cert.extensions.clear())\n");
     cert.extensions.clear();
-    printf("debug: x509_free: X509_free(opaque)\n");
     X509_free((X509 *)cert.opaque);
 }
 

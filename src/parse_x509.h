@@ -28,8 +28,6 @@ struct Certificate {
 
 std::string oid_get_name(const std::string &oid, bool shortname=false);
 
-std::string hexdump(const unsigned char *data, int length);
-std::string hexdump(const std::string &str);
 int x509_parse_der(const std::string &der_bytes, Certificate &cert);
 void x509_free(Certificate &cert);
 
