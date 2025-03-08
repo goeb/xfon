@@ -24,6 +24,7 @@ public:
     virtual enum ValueType get_type() const = 0;
     virtual std::string to_string() const = 0;
     virtual ~Value() {}
+    virtual Value *clone() const = 0;
 };
 
 /**
@@ -33,8 +34,12 @@ class Array : public Value {
 public:
     inline enum ValueType get_type() const { return V_ARRAY; }
     std::list<Value*> items;
+    Array() {}
     ~Array();
     std::string to_string() const;
+    Array(const Array &other);
+    Array& operator=(const Array &other);
+    Value *clone() const;
 };
 
 /**
@@ -45,13 +50,16 @@ class Object : public Value {
 public:
     enum ValueType get_type() const { return V_OBJECT; }
     std::map<std::string, Value*> items;
+    Object() {}
     ~Object();
     std::string to_string() const;
+    Object(const Object &other);
+    Object& operator=(const Object &other);
+    Value *clone() const;
 };
 
 class GenericString : public Value, std::string {
 public:
-    virtual enum ValueType get_type() const = 0;
     GenericString(const std::string &val) : std::string(val) {}
     virtual std::string to_string() const;
 };
@@ -60,18 +68,21 @@ class Number : public GenericString {
 public:
     inline enum ValueType get_type() const { return V_NUMBER; }
     Number(const std::string &val) : GenericString(val) {}
+    Value *clone() const;
 };
 
 class String : public GenericString {
 public:
     inline enum ValueType get_type() const { return V_STRING; }
     String(const std::string &val) : GenericString(val) {}
+    Value *clone() const;
 };
 
 class Literal : public GenericString {
 public:
     Literal(const std::string &val) : GenericString(val) {}
     enum ValueType get_type() const { return V_LITERAL; }
+    Value *clone() const;
 };
 
 #endif
