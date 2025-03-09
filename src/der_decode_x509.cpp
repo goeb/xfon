@@ -129,7 +129,7 @@ static int der_decode_boolean(const OctetString &der_bytes, size_t &i_start, siz
  */
 static int der_decode_octet_string(const OctetString &der_bytes, size_t &i_start, size_t i_end, Value **out)
 {
-    fprintf(stderr, "der_decode_octet_string\n");
+    //fprintf(stderr, "debug: der_decode_octet_string\n");
     assert(i_start < i_end);
     assert(i_end <= der_bytes.size());
     const unsigned char *ptr = der_bytes.data()+i_start;
@@ -140,7 +140,7 @@ static int der_decode_octet_string(const OctetString &der_bytes, size_t &i_start
     }
     i_start = ptr - der_bytes.data(); // move the index forward to consume the bytes
     *out = new String(hexlify(octetstring->data, octetstring->length));
-    fprintf(stderr, "debug: der_decode_octet_string: *out=%p\n", *out);
+    //fprintf(stderr, "debug: der_decode_octet_string: *out=%p\n", *out);
     ASN1_OCTET_STRING_free(octetstring);
     return 0;
 }
@@ -180,7 +180,7 @@ int der_decode_x509_basic_constraints(const OctetString &der_bytes, size_t &i_st
     assert(i_start < i_end);
     assert(i_end <= der_bytes.size());
 
-    printf("basic constraints: %s\n", hexlify(der_bytes).c_str());
+    //printf("debug: der_decode_x509_basic_constraints: der_bytes=%s\n", hexlify(der_bytes).c_str());
 
     size_t length;
     int tag;
@@ -301,7 +301,7 @@ static int der_decode_x509_name(const OctetString &der_bytes, Value **out)
  */
 int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
 {
-    fprintf(stderr, "der_decode_x509_general_names: %s\n", hexlify(der_bytes).c_str());
+    //fprintf(stderr, "debug: der_decode_x509_general_names: %s\n", hexlify(der_bytes).c_str());
     size_t length;
     int tag;
     OctetString value = der_bytes;
@@ -314,7 +314,7 @@ int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
             delete obj;
             return -1;
         }
-        fprintf(stderr, "der_decode_x509_general_names: tag=%d\n", tag);
+        //fprintf(stderr, "debug: der_decode_x509_general_names: tag=%d\n", tag);
 
         switch (tag) {
         case 0:
@@ -334,7 +334,7 @@ int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
             Value *name = NULL;
             int err = der_decode_x509_name(field, &name);
             if (!err) {
-                fprintf(stderr, "der_decode_x509_name() -> name=%p\n", name);
+                //fprintf(stderr, "debug: der_decode_x509_name() -> name=%p\n", name);
                 obj->insert("directoryName", name);
             }
         }
@@ -384,7 +384,7 @@ int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
  */
 int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, Value **out)
 {
-    fprintf(stderr, "der_decode_x509_authority_key_identifier: %s\n", hexlify(der_bytes).c_str());
+    //fprintf(stderr, "debug: der_decode_x509_authority_key_identifier: %s\n", hexlify(der_bytes).c_str());
     size_t length;
     int tag;
     OctetString value;
@@ -406,14 +406,14 @@ int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, Value
         // null parameter
     } else {
         while (value.size()) {
-            fprintf(stderr, "value=%s\n", hexlify(value).c_str());
+            //fprintf(stderr, "debug: der_decode_x509_authority_key_identifier: value=%s\n", hexlify(value).c_str());
             OctetString field;
             int n_bytes = get_tag_length_value(value, tag, length, field);
             if (n_bytes < 0) {
                 fprintf(stderr, "der_decode_x509_authority_key_identifier: cannot decode tag and length (2)\n");
                 return -1;
             }
-            printf("tag=%d\n", tag);
+            //printf("debug: der_decode_x509_authority_key_identifier: tag=%d\n", tag);
             if (0 == tag) {
                 keyidentifier = new String(hexlify(field));
             } else if (1 == tag) {

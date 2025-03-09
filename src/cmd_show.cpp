@@ -77,7 +77,7 @@ struct argp argp_show = { options, parse_opt, args_doc, doc };
  */
 std::string get_pem_cert(std::istream &input)
 {
-    fprintf(stderr, "get_pem_cert\n");
+    //fprintf(stderr, "debug: get_pem_cert\n");
     std::string line;
     std::getline(input, line);
     std::string base64lines, base64lines_tmp;
@@ -199,12 +199,10 @@ static int show_cert_file(std::istream &input, const char *filename)
             std::string oidname = oid_get_name(it.first.c_str());
             const char *longname_prefix = "tbsCertificate.extensions";
             printf("%s.%s.critical: %d\n", longname_prefix, oidname.c_str(), it.second.critical);
-            printf("it.second.extn_value=%p\n", it.second.extn_value);
-            printf("it.second.extn_value: type %d\n", it.second.extn_value->get_type());
+            //printf("debug: it.second.extn_value=%p\n", it.second.extn_value);
+            //printf("debug: it.second.extn_value: type %d\n", it.second.extn_value->get_type());
             printf("%s.%s.extnValue: %s\n", longname_prefix, oidname.c_str(), it.second.extn_value->to_string().c_str());
-            printf("debug: xxxxxxx\n");
         }
-        printf("debug: yyyy\n");
 
         x509_free(cert);
     }

@@ -226,9 +226,9 @@ static void get_extensions(const X509 *cert, std::map<ObjectIdentifier, Extensio
                 }
                 assert(extn_value);
                 // insert the item
-                extensions[numeric_oid] = Extension();
+                extensions[numeric_oid];
                 extensions[numeric_oid].critical = critical;
-                fprintf(stderr, "debug: extensions[%s].extn_value=%p (type %d)\n", numeric_oid, extn_value, extn_value->get_type());
+                //fprintf(stderr, "debug: extensions[%s].extn_value=%p (type %d)\n", numeric_oid, extn_value, extn_value->get_type());
                 extensions[numeric_oid].extn_value = extn_value;
             }
         }
