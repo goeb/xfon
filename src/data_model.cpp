@@ -38,6 +38,20 @@ Array& Array::operator=(const Array& other)
     return *this;
 }
 
+/**
+ * @brief Array::push_back
+ * @param value
+ *
+ * The value is taken by the Array instance. The caller
+ * must not delete it after this call.
+
+ */
+void Array::push_back(Value *value)
+{
+    items.push_back(value);
+}
+
+
 Value *Array::clone() const
 {
     Array *new_array = new Array();
@@ -85,6 +99,20 @@ Object& Object::operator=(const Object &other)
         items[i.first] = i.second->clone();
     }
     return *this;
+}
+
+/**
+ * @brief Object::insert
+ * @param key
+ * @param value
+ *
+ * The value is taken by the Object instance. The caller
+ * must not delete it after this call.
+ */
+void Object::insert(const std::string &key, Value *value)
+{
+    if (items.count(key)) delete items[key];
+    items[key] = value;
 }
 
 Value *Object::clone() const

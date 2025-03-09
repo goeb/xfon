@@ -31,14 +31,16 @@ public:
  * @brief Array of values [ value, ... ]
  */
 class Array : public Value {
+private:
+    std::list<Value*> items;
 public:
     inline enum ValueType get_type() const { return V_ARRAY; }
-    std::list<Value*> items;
     Array() {}
     ~Array();
     std::string to_string() const;
     Array(const Array &other);
     Array& operator=(const Array &other);
+    void push_back(Value *value);
     Value *clone() const;
 };
 
@@ -47,14 +49,16 @@ public:
  * "Object" here refers to the JSON definition of "Object".
  */
 class Object : public Value {
+private:
+    std::map<std::string, Value*> items;
 public:
     enum ValueType get_type() const { return V_OBJECT; }
-    std::map<std::string, Value*> items;
     Object() {}
     ~Object();
     std::string to_string() const;
     Object(const Object &other);
     Object& operator=(const Object &other);
+    void insert(const std::string &key, Value *value);
     Value *clone() const;
 };
 

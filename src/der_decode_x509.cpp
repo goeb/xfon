@@ -226,8 +226,8 @@ int der_decode_x509_basic_constraints(const OctetString &der_bytes, size_t &i_st
     }
 
     Object *obj = new Object();
-    obj->items["ca"] = ca;
-    if (pathlenconstraint) obj->items["pathlenconstraint"] = pathlenconstraint;
+    obj->insert("ca", ca);
+    if (pathlenconstraint) obj->insert("pathlenconstraint", pathlenconstraint);
     *out = obj;
     return 0;
 }
@@ -318,16 +318,16 @@ int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
 
         switch (tag) {
         case 0:
-            obj->items["otherName"] = new String(hexlify(field));
+            obj->insert("otherName", new String(hexlify(field)));
             break;
         case 1:
-            obj->items["rfc822Name"] = new String(hexlify(field));
+            obj->insert("rfc822Name", new String(hexlify(field)));
             break;
         case 2:
-            obj->items["dNSName"] = new String(hexlify(field));
+            obj->insert("dNSName", new String(hexlify(field)));
             break;
         case 3:
-            obj->items["x400Address"] = new String(hexlify(field));
+            obj->insert("x400Address", new String(hexlify(field)));
             break;
         case 4:
         {
@@ -335,21 +335,21 @@ int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
             int err = der_decode_x509_name(field, &name);
             if (!err) {
                 fprintf(stderr, "der_decode_x509_name() -> name=%p\n", name);
-                obj->items["directoryName"] = name;
+                obj->insert("directoryName", name);
             }
         }
             break;
         case 5:
-            obj->items["ediPartyName"] = new String(hexlify(field));
+            obj->insert("ediPartyName", new String(hexlify(field)));
             break;
         case 6:
-            obj->items["uniformResourceIdentifier"] = new String(hexlify(field));
+            obj->insert("uniformResourceIdentifier", new String(hexlify(field)));
             break;
         case 7:
-            obj->items["iPAddress"] = new String(hexlify(field));
+            obj->insert("iPAddress", new String(hexlify(field)));
             break;
         case 8:
-            obj->items["registeredID"] = new String(hexlify(field));
+            obj->insert("registeredID", new String(hexlify(field)));
             break;
         default:
             fprintf(stderr, "der_decode_x509_general_names: invalid tag 0x%x\n", tag);
@@ -436,14 +436,15 @@ int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, Value
     }
 
     obj = new Object();
-    if (keyidentifier) obj->items["keyidentifier"] = keyidentifier;
-    if (authoritycertissuer) obj->items["authoritycertissuer"] = authoritycertissuer;
-    if (authoritycertserialnumber) obj->items["authoritycertserialnumber"] = authoritycertserialnumber;
+    if (keyidentifier) obj->insert("keyidentifier", keyidentifier);
+    if (authoritycertissuer) obj->insert("authoritycertissuer", authoritycertissuer);
+    if (authoritycertserialnumber) obj->insert("authoritycertserialnumber", authoritycertserialnumber);
     *out = obj;
     return 0;
 
 error:
     if (keyidentifier) delete keyidentifier;
+    if (authoritycertissuer) delete authoritycertissuer;
     if (authoritycertserialnumber) delete authoritycertserialnumber;
     return -1;
 }
