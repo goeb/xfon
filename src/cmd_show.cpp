@@ -111,7 +111,7 @@ std::string get_pem_cert(std::istream &input)
  */
 std::string get_der_sequence(std::istream &input)
 {
-    fprintf(stderr, "get_der_sequence\n");
+    //fprintf(stderr, "debug: get_der_sequence\n");
     std::string der_bytes;
 
     // Get the length of the SEQUENCE (DER)
@@ -143,10 +143,10 @@ std::string get_der_sequence(std::istream &input)
             der_bytes.append(&c, 1);
             data_length = (data_length << 8) + (unsigned char)c;
         }
-        fprintf(stderr, "multi-byte length=0x%x\n", data_length);
+        //fprintf(stderr, "debug: multi-byte length=0x%x\n", data_length);
     } else {
         data_length = (unsigned char)buffer[1];
-        fprintf(stderr, "single-byte length=0x%x\n", data_length);
+        //fprintf(stderr, "debug: single-byte length=0x%x\n", data_length);
     }
 
     // Read the SEQUENCE contents
@@ -165,8 +165,8 @@ std::string get_der_sequence(std::istream &input)
 
 static int show_cert_file(std::istream &input, const char *filename)
 {
-    int n_cert = 0;
     fprintf(stderr, "show_cert_file: %s\n", filename);
+    std::list<Certificate*> certificates;
     while (1) {
         int c = input.peek();
         if (c == EOF) {
@@ -175,7 +175,6 @@ static int show_cert_file(std::istream &input, const char *filename)
             fprintf(stderr, "Cannot get first character of '%s': %s\n", filename, strerror(errno));
             return -1;
         }
-        n_cert++;
         std::string der_bytes;
         if (c == '-') der_bytes = get_pem_cert(input);
         else if (c == 0x30) der_bytes = get_der_sequence(input);
@@ -188,14 +187,22 @@ static int show_cert_file(std::istream &input, const char *filename)
             return -1;
         }
 
-        Certificate cert;
-        int err = x509_parse_der(der_bytes, cert);
+        Certificate *cert = new Certificate();
+        int err = x509_parse_der(der_bytes, *cert);
         if (err) return -1;
+        certificates.push_back(cert);
+    }
 
-        for (auto const &it: cert.properties) {
+    if (certificates.empty()) {
+        fprintf(stderr, "No certificate read from '%s'\n", filename);
+        return -1;
+    }
+
+    for (auto const &cert: certificates) {
+        for (auto const &it: cert->properties) {
             printf("%s: %s\n", it.first.c_str(), it.second.c_str());
         }
-        for (auto const &it: cert.extensions) {
+        for (auto const &it: cert->extensions) {
             std::string oidname = oid_get_name(it.first.c_str());
             const char *longname_prefix = "tbsCertificate.extensions";
             printf("%s.%s.critical: %d\n", longname_prefix, oidname.c_str(), it.second.critical);
@@ -204,13 +211,10 @@ static int show_cert_file(std::istream &input, const char *filename)
             printf("%s.%s.extnValue: %s\n", longname_prefix, oidname.c_str(), it.second.extn_value->to_string().c_str());
         }
 
-        x509_free(cert);
+        x509_free(*cert);
+        delete cert;
     }
 
-    if (0 == n_cert) {
-        fprintf(stderr, "No certificate read from '%s'\n", filename);
-        return -1;
-    }
     return 0;
 }
 
