@@ -25,8 +25,6 @@ struct Certificate {
     void *opaque;
 };
 
-std::string oid_get_name(const std::string &oid, bool shortname=false);
-
 int x509_parse_der(const std::string &der_bytes, Certificate &cert);
 void x509_free(Certificate &cert);
 

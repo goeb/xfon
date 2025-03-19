@@ -3,7 +3,7 @@
 
 #include <string>
 
-std::string oid_get_name(const std::string &oid, bool shortname);
+std::string oid_get_name(const std::string &oid, bool shortname=false);
 
 
 #endif // OID_NAME_H
