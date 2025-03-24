@@ -26,7 +26,6 @@ class Certificate {
 public:
     //Object *properties;
     Object properties;
-    std::map<ObjectIdentifier, Extension> extensions;
     void *opaque;
 };
 

@@ -169,10 +169,11 @@ static int der_get_data_length(unsigned char *der_data, int der_length)
     return length;
 }
 
-static void get_extensions(const X509 *cert, std::map<ObjectIdentifier, Extension> &extensions)
+static Object *get_extensions(const X509 *cert)
 {
+    Object *extensions = new Object();
     const STACK_OF(X509_EXTENSION) *ptr_extensions = X509_get0_extensions(cert);
-    if (!ptr_extensions) return;
+    if (!ptr_extensions) return extensions;
 
     for (int i = 0; i < sk_X509_EXTENSION_num(ptr_extensions); i++) {
         X509_EXTENSION *ptr_extension = sk_X509_EXTENSION_value(ptr_extensions, i);
@@ -185,7 +186,7 @@ static void get_extensions(const X509 *cert, std::map<ObjectIdentifier, Extensio
         int err = OBJ_obj2txt(numeric_oid, sizeof(numeric_oid)-1, obj, 1);
         if (err < 0) {
             fprintf(stderr, "Cannot get extnID (tbsCertificate.extensions[%d])\n", i);
-        } else if (extensions.count(numeric_oid)) {
+        } else if (extensions->get(numeric_oid)) {
             // OID already registered (a certificate should not have several extensions with the same OID)
             fprintf(stderr, "extnID '%s' already registered (tbsCertificate.extensions[%d])\n", numeric_oid, i);
         } else {
@@ -226,13 +227,14 @@ static void get_extensions(const X509 *cert, std::map<ObjectIdentifier, Extensio
                 }
                 assert(extn_value);
                 // insert the item
-                extensions[numeric_oid];
-                extensions[numeric_oid].critical = critical;
-                //fprintf(stderr, "debug: extensions[%s].extn_value=%p (type %d)\n", numeric_oid, extn_value, extn_value->get_type());
-                extensions[numeric_oid].extn_value = extn_value;
+                Object *extension = new Object();
+                extension->insert("critical", new Literal(critical?"true":"false"));
+                extension->insert("extn_value", extn_value);
+                extensions->insert(numeric_oid, extension);
             }
         }
     }
+    return extensions;
 }
 
 static int populate_map(const X509 *cert, Certificate &result)
@@ -333,7 +335,8 @@ static int populate_map(const X509 *cert, Certificate &result)
     }
 
     // tbsCertificate.extensions
-    get_extensions(cert, result.extensions);
+    Object *extensions = get_extensions(cert);
+    result.properties.insert("tbsCertificate.extensions", extensions);
 
     // signatureAlgorithm
     // signatureValue
@@ -383,7 +386,6 @@ int x509_parse_der(const std::string &der_bytes, Certificate &cert)
 
 void x509_free(Certificate &cert)
 {
-    cert.extensions.clear();
     X509_free((X509 *)cert.opaque);
 }
 

@@ -200,17 +200,21 @@ static int show_cert_file(std::istream &input, const char *filename)
 
     for (auto const &cert: certificates) {
         for (auto const &it: cert->properties) {
-            printf("%s: %s\n", it.first.c_str(), it.second->to_string().c_str());
+            if (it.first == "tbsCertificate.extensions") {
+                Object *extensions = dynamic_cast<Object*>(it.second);
+                for (auto const &ext: *extensions) {
+                    Object *extension = dynamic_cast<Object*>(ext.second);
+                    std::string oidname = oid_get_name(ext.first.c_str());
+                    const char *longname_prefix = "tbsCertificate.extensions";
+                    const Value *critical = extension->get("critical");
+                    const Value *extn_value = extension->get("extn_value");
+                    printf("%s.%s.critical: %s\n", longname_prefix, oidname.c_str(), critical->to_string().c_str());
+                    printf("%s.%s.extnValue: %s\n", longname_prefix, oidname.c_str(), extn_value->to_string().c_str());
+                }
+            } else {
+                printf("%s: %s\n", it.first.c_str(), it.second->to_string().c_str());
+            }
         }
-        for (auto const &it: cert->extensions) {
-            std::string oidname = oid_get_name(it.first.c_str());
-            const char *longname_prefix = "tbsCertificate.extensions";
-            printf("%s.%s.critical: %d\n", longname_prefix, oidname.c_str(), it.second.critical);
-            //printf("debug: it.second.extn_value=%p\n", it.second.extn_value);
-            //printf("debug: it.second.extn_value: type %d\n", it.second.extn_value->get_type());
-            printf("%s.%s.extnValue: %s\n", longname_prefix, oidname.c_str(), it.second.extn_value->to_string().c_str());
-        }
-
         x509_free(*cert);
         delete cert;
     }
