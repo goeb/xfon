@@ -200,7 +200,7 @@ static int show_cert_file(std::istream &input, const char *filename)
 
     for (auto const &cert: certificates) {
         for (auto const &it: cert->properties) {
-            printf("%s: %s\n", it.first.c_str(), it.second.c_str());
+            printf("%s: %s\n", it.first.c_str(), it.second->to_string().c_str());
         }
         for (auto const &it: cert->extensions) {
             std::string oidname = oid_get_name(it.first.c_str());

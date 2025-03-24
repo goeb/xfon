@@ -1,6 +1,6 @@
 #include "util.h"
 
-std::string hexlify(const unsigned char *data, int length)
+std::string hexlify(const unsigned char *data, size_t length)
 {
     std::string result;
     char buffer[3];

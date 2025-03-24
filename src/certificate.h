@@ -25,7 +25,7 @@ struct Extension {
 class Certificate {
 public:
     //Object *properties;
-    std::map<PropertyName, PropertyValue> properties;
+    Object properties;
     std::map<ObjectIdentifier, Extension> extensions;
     void *opaque;
 };

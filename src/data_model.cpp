@@ -1,4 +1,5 @@
 #include "data_model.h"
+#include "util.h"
 
 Array::~Array()
 {
@@ -115,6 +116,13 @@ void Object::insert(const std::string &key, Value *value)
     items[key] = value;
 }
 
+const Value *Object::get(const std::string &key) const
+{
+    std::map<std::string, Value*>::const_iterator it = items.find(key);
+    if (it == items.end()) return nullptr;
+    return it->second;
+}
+
 Value *Object::clone() const
 {
     Object *new_object = new Object();
@@ -144,3 +152,17 @@ Value *Literal::clone() const
     return new Literal(this->to_string());
 }
 
+Bytes::Bytes(const unsigned char *ptr, size_t size) : bytes(ptr, size)
+{
+
+}
+
+Value *Bytes::clone() const
+{
+    return new Bytes(bytes.data(), bytes.size());
+}
+
+std::string Bytes::to_string() const
+{
+    return hexlify(bytes.data(), bytes.size());
+}

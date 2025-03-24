@@ -5,12 +5,15 @@
 #include <map>
 #include <string>
 
+#include "util.h"
+
 enum ValueType {
     V_ARRAY,
     V_NUMBER,
     V_OBJECT,
     V_STRING,
-    V_LITERAL
+    V_LITERAL,
+    V_BYTES
 };
 
 /**
@@ -59,7 +62,34 @@ public:
     Object(const Object &other);
     Object& operator=(const Object &other);
     void insert(const std::string &key, Value *value);
+    const Value *get(const std::string &key) const;
     Value *clone() const;
+
+    struct Iterator {
+        Iterator(std::map<std::string, Value*>::const_iterator it) noexcept : current(it) {}
+        Iterator &operator++() noexcept {
+            current++;
+            return *this;
+        }
+        bool operator!=(const Iterator &other) const noexcept {
+            return this->current != other.current;
+        }
+        std::pair<std::string, Value*> operator*() const noexcept {
+            return *current;
+        }
+
+    private:
+        std::map<std::string, Value*>::const_iterator current;
+    };
+
+    Iterator begin() const noexcept {
+        return Iterator(this->items.begin());
+    }
+
+    Iterator end() const noexcept {
+        return Iterator(this->items.end());
+    }
+
 };
 
 class GenericString : public Value, std::string {
@@ -87,6 +117,16 @@ public:
     Literal(const std::string &val) : GenericString(val) {}
     enum ValueType get_type() const { return V_LITERAL; }
     Value *clone() const;
+};
+
+class Bytes : public Value {
+private:
+    OctetString bytes;
+public:
+    inline enum ValueType get_type() const { return V_BYTES; }
+    Bytes(const unsigned char *ptr, size_t size);
+    Value *clone() const;
+    virtual std::string to_string() const;
 };
 
 #endif
