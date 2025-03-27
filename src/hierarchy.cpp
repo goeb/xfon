@@ -20,17 +20,7 @@ bool is_self_signed(const Certificate &cert)
  */
 bool is_issuer(const Certificate &cert_issuer, const Certificate &cert_child)
 {
-    if (!cert_issuer.properties.count("tbsCertificate.subject")) {
-        fprintf(stderr, "error: certificate has no subject"); // TODO give move detail about the certificate
-        return false;
-    }
-
-    if (!cert_child.properties.count("tbsCertificate.issuer")) {
-        fprintf(stderr, "error: certificate has no subject"); // TODO give move detail about the certificate
-        return false;
-    }
-
-    if (cert_issuer.properties["tbsCertificate.subject"] != cert_child.properties.count("tbsCertificate.issuer")) {
+    if (cert_issuer.tbs_certificate.subject != cert_child.tbs_certificate.issuer) {
         return false;
     }
 
@@ -39,4 +29,6 @@ bool is_issuer(const Certificate &cert_issuer, const Certificate &cert_child)
 
 
     // Verify signature
+
+    return true;
 }

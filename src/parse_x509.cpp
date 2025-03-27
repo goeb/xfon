@@ -169,11 +169,10 @@ static int der_get_data_length(unsigned char *der_data, int der_length)
     return length;
 }
 
-static Object *get_extensions(const X509 *cert)
+static void get_extensions(const X509 *cert, Object &extensions)
 {
-    Object *extensions = new Object();
     const STACK_OF(X509_EXTENSION) *ptr_extensions = X509_get0_extensions(cert);
-    if (!ptr_extensions) return extensions;
+    if (!ptr_extensions) return;
 
     for (int i = 0; i < sk_X509_EXTENSION_num(ptr_extensions); i++) {
         X509_EXTENSION *ptr_extension = sk_X509_EXTENSION_value(ptr_extensions, i);
@@ -186,7 +185,7 @@ static Object *get_extensions(const X509 *cert)
         int err = OBJ_obj2txt(numeric_oid, sizeof(numeric_oid)-1, obj, 1);
         if (err < 0) {
             fprintf(stderr, "Cannot get extnID (tbsCertificate.extensions[%d])\n", i);
-        } else if (extensions->get(numeric_oid)) {
+        } else if (extensions.get(numeric_oid)) {
             // OID already registered (a certificate should not have several extensions with the same OID)
             fprintf(stderr, "extnID '%s' already registered (tbsCertificate.extensions[%d])\n", numeric_oid, i);
         } else {
@@ -230,11 +229,10 @@ static Object *get_extensions(const X509 *cert)
                 Object *extension = new Object();
                 extension->insert("critical", new Literal(critical?"true":"false"));
                 extension->insert("extn_value", extn_value);
-                extensions->insert(numeric_oid, extension);
+                extensions.insert(numeric_oid, extension);
             }
         }
     }
-    return extensions;
 }
 
 static int populate_map(const X509 *cert, Certificate &result)
@@ -248,13 +246,13 @@ static int populate_map(const X509 *cert, Certificate &result)
     long version = X509_get_version(cert);
     str_stream.str("");
     str_stream << version;
-    result.properties.insert("tbsCertificate.version", new String(str_stream.str()));
+    result.tbs_certificate.version = version;
 
     // tbsCertificate.serialNumber
     const ASN1_INTEGER *serial = X509_get0_serialNumber(cert);
-    result.properties.insert("tbsCertificate.serialNumber", new String(to_string(serial)));
+    result.tbs_certificate.serial_number = to_string(serial);
 
-    // tbsCertificate.signature.algorithm
+    // tbsCertificate.signature.algorithm & parameters
     const X509_ALGOR *tbs_sigalg = X509_get0_tbs_sigalg(cert);
     BIO_reset(buffer);
     err = i2a_ASN1_OBJECT(buffer, tbs_sigalg->algorithm);
@@ -262,10 +260,8 @@ static int populate_map(const X509 *cert, Certificate &result)
         fprintf(stderr, "Error while serializing tbsCertificate.signature.algorithm\n");
         value = "";
     } else value = get_bio_mem_string(buffer);
-    result.properties.insert("tbsCertificate.signature.algorithm", new String(value));
-
-    // tbsCertificate.signature.parameters
-    result.properties.insert("tbsCertificate.signature.parameters", new String(to_string(tbs_sigalg->parameter)));
+    result.tbs_certificate.signature.algorithm = value;
+    result.tbs_certificate.signature.parameters = to_string(tbs_sigalg->parameter);
 
     // tbsCertificate.issuer
     X509_NAME *issuer_name = X509_get_issuer_name(cert);
@@ -275,7 +271,7 @@ static int populate_map(const X509 *cert, Certificate &result)
         fprintf(stderr, "Error while serializing tbsCertificate.issuer\n");
         value = "";
     } else value = get_bio_mem_string(buffer);
-    result.properties.insert("tbsCertificate.issuer", new String(value));
+    result.tbs_certificate.issuer = value;
 
     // tbsCertificate.validity.notBefore
     BIO_reset(buffer);
@@ -284,7 +280,7 @@ static int populate_map(const X509 *cert, Certificate &result)
         fprintf(stderr, "Error while serializing tbsCertificate.issuer\n");
         value = "";
     } else value = get_bio_mem_string(buffer);
-    result.properties.insert("tbsCertificate.validity.notBefore", new String(value));
+    result.tbs_certificate.validity.not_before = value;
 
     // tbsCertificate.validity.notAfter
     BIO_reset(buffer);
@@ -293,7 +289,7 @@ static int populate_map(const X509 *cert, Certificate &result)
         fprintf(stderr, "Error while serializing tbsCertificate.issuer\n");
         value = "";
     } else value = get_bio_mem_string(buffer);
-    result.properties.insert("tbsCertificate.validity.notAfter", new String(value));
+    result.tbs_certificate.validity.not_after = value;
 
     // tbsCertificate.subject
     BIO_reset(buffer);
@@ -303,7 +299,7 @@ static int populate_map(const X509 *cert, Certificate &result)
         fprintf(stderr, "Error while serializing tbsCertificate.issuer\n");
         value = "";
     } else value = get_bio_mem_string(buffer);
-    result.properties.insert("tbsCertificate.subject", new String(value));
+    result.tbs_certificate.subject = value;
 
     // tbsCertificate.subjectPublicKeyInfo.algorithm
     X509_PUBKEY *pubkey = X509_get_X509_PUBKEY(cert);
@@ -317,10 +313,11 @@ static int populate_map(const X509 *cert, Certificate &result)
         fprintf(stderr, "Error while serializing tbsCertificate.subjectPublicKeyInfo.algorithm\n");
         value = "";
     } else value = get_bio_mem_string(buffer);
-    result.properties.insert("tbsCertificate.subjectPublicKeyInfo.algorithm", new String(value));
+    result.tbs_certificate.subject_public_key_info.algorithm.algorithm = value;
+    result.tbs_certificate.subject_public_key_info.algorithm.parameters = to_string(pubkeyalgo->parameter);
 
     // tbsCertificate.subjectPublicKeyInfo.subjectPublicKey
-    result.properties.insert("tbsCertificate.subjectPublicKeyInfo.subjectPublicKey", new Bytes(pubkey_bytes, pubkey_length)); // DER-encoded public key
+    result.tbs_certificate.subject_public_key_info.subject_public_key = OctetString(pubkey_bytes, pubkey_length); // DER-encoded public key
 
     // tbsCertificate.issuerUniqueID
     // tbsCertificate.subjectUniqueID
@@ -328,15 +325,14 @@ static int populate_map(const X509 *cert, Certificate &result)
     const ASN1_BIT_STRING *subject_uid = NULL;
     X509_get0_uids(cert, &issuer_uid, &subject_uid);
     if (issuer_uid) {
-        result.properties.insert("tbsCertificate.issuerUniqueID", new Bytes(issuer_uid->data, issuer_uid->length));
+        result.tbs_certificate.issuer_unique_id = OctetString(issuer_uid->data, issuer_uid->length);
     }
     if (subject_uid) {
-        result.properties.insert("tbsCertificate.subjectUniqueID", new Bytes(subject_uid->data, subject_uid->length));
+        result.tbs_certificate.subject_unique_id = OctetString(subject_uid->data, subject_uid->length);
     }
 
     // tbsCertificate.extensions
-    Object *extensions = get_extensions(cert);
-    result.properties.insert("tbsCertificate.extensions", extensions);
+    get_extensions(cert, result.tbs_certificate.extensions);
 
     // signatureAlgorithm
     // signatureValue
@@ -351,8 +347,9 @@ static int populate_map(const X509 *cert, Certificate &result)
         fprintf(stderr, "Error while serializing signatureAlgorithm\n");
         value = "";
     } else value = get_bio_mem_string(buffer);
-    result.properties.insert("signatureAlgorithm", new String(value));
-    result.properties.insert("signatureValue", new Bytes(signature->data, signature->length));
+    result.signature_algorithm.algorithm = value;
+    result.signature_algorithm.parameters = to_string(signature_algo->parameter);
+    result.signature_value = OctetString(signature->data, signature->length);
 
     BIO_free(buffer);
     return 0;

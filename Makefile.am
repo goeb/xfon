@@ -11,6 +11,7 @@ xeert_SOURCES = \
 			src/cmd_show.cpp \
 			src/data_model.cpp \
 			src/der_decode_x509.cpp \
+			src/hierarchy.cpp \
 			src/oid_name.cpp \
 			src/parse_x509.cpp \
 			src/util.cpp \

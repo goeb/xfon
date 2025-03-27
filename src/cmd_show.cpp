@@ -199,21 +199,19 @@ static int show_cert_file(std::istream &input, const char *filename)
     }
 
     for (auto const &cert: certificates) {
-        for (auto const &it: cert->properties) {
-            if (it.first == "tbsCertificate.extensions") {
-                Object *extensions = dynamic_cast<Object*>(it.second);
-                for (auto const &ext: *extensions) {
-                    Object *extension = dynamic_cast<Object*>(ext.second);
-                    std::string oidname = oid_get_name(ext.first.c_str());
-                    const char *longname_prefix = "tbsCertificate.extensions";
-                    const Value *critical = extension->get("critical");
-                    const Value *extn_value = extension->get("extn_value");
-                    printf("%s.%s.critical: %s\n", longname_prefix, oidname.c_str(), critical->to_string().c_str());
-                    printf("%s.%s.extnValue: %s\n", longname_prefix, oidname.c_str(), extn_value->to_string().c_str());
-                }
-            } else {
-                printf("%s: %s\n", it.first.c_str(), it.second->to_string().c_str());
-            }
+        printf("tbsCertificate.subject: %s\n", cert->tbs_certificate.subject.c_str());
+        printf("tbsCertificate.issuer: %s\n", cert->tbs_certificate.issuer.c_str());
+        printf("tbsCertificate.validity.notBefore: %s\n", cert->tbs_certificate.validity.not_before.c_str());
+        printf("tbsCertificate.validity.notAfter: %s\n", cert->tbs_certificate.validity.not_before.c_str());
+        for (auto const &ext: cert->tbs_certificate.extensions) {
+            assert(ext.second->get_type() == V_OBJECT);
+            Object *extension = dynamic_cast<Object*>(ext.second);
+            std::string oidname = oid_get_name(ext.first.c_str());
+            const char *longname_prefix = "tbsCertificate.extensions";
+            const Value *critical = extension->get("critical");
+            const Value *extn_value = extension->get("extn_value");
+            printf("%s.%s.critical: %s\n", longname_prefix, oidname.c_str(), critical->to_string().c_str());
+            printf("%s.%s.extnValue: %s\n", longname_prefix, oidname.c_str(), extn_value->to_string().c_str());
         }
         x509_free(*cert);
         delete cert;
