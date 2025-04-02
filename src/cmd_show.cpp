@@ -11,6 +11,7 @@
 
 #include "cli.h"
 #include "cmd_show.h"
+#include "der_decode_x509.h"
 #include "oid_name.h"
 #include "parse_x509.h"
 
@@ -75,7 +76,7 @@ struct argp argp_show = { options, parse_opt, args_doc, doc };
  * Returns:
  *    Bytes of the DER encoded certificate
  */
-std::string get_pem_cert(std::istream &input)
+OctetString get_pem_cert(std::istream &input)
 {
     //fprintf(stderr, "debug: get_pem_cert\n");
     std::string line;
@@ -93,14 +94,14 @@ std::string get_pem_cert(std::istream &input)
         }
         if (input.fail()) {
             fprintf(stderr, "get_pem_cert: input error\n");
-            return "";
+            return OctetString();
         }
     } else {
         fprintf(stderr, "get_pem_cert: invalid first line\n");
-        return "";
+        return OctetString();
     }
     // convert from base64
-    std::string bytes = base64_decode(base64lines);
+    OctetString bytes = base64_decode(base64lines);
     return bytes;
 }
 
@@ -109,19 +110,19 @@ std::string get_pem_cert(std::istream &input)
  * Returns:
  *    Bytes of the DER encoded certificate
  */
-std::string get_der_sequence(std::istream &input)
+OctetString get_der_sequence(std::istream &input)
 {
     //fprintf(stderr, "debug: get_der_sequence\n");
-    std::string der_bytes;
+    OctetString der_bytes;
 
     // Get the length of the SEQUENCE (DER)
     // - either the first byt, if < 128
     // - or the following bytes (big endian)
-    char buffer[2];
-    input.read(buffer, 2);
+    unsigned char buffer[2];
+    input.read((char *)buffer, 2);
     if (!input.good()) {
         fprintf(stderr, "Cannot get first 2 bytes of DER SEQUENCE: %s\n", strerror(errno));
-        return "";
+        return OctetString();
     }
     der_bytes.append(buffer, 2);
     int data_length = 0;
@@ -129,16 +130,16 @@ std::string get_der_sequence(std::istream &input)
         // Length encoded on multibytes, big-endian
         int n_bytes = (unsigned char)buffer[1] & 0x7f;
         for (int i=0; i<n_bytes; i++) {
-            char c;
-            input.read(&c, 1);
+            unsigned char c;
+            input.read((char*)&c, 1);
             if (!input.good()) {
                 fprintf(stderr, "Cannot get next byte of DER SEQUENCE: %s\n", strerror(errno));
-                return "";
+                return OctetString();
             }
             if (data_length > (INT_MAX >> 8 )) {
                 // unsigned integer overflow
                 fprintf(stderr, "Length of DER SEQUENCE overflow\n");
-                return "";
+                return OctetString();
             }
             der_bytes.append(&c, 1);
             data_length = (data_length << 8) + (unsigned char)c;
@@ -150,12 +151,12 @@ std::string get_der_sequence(std::istream &input)
     }
 
     // Read the SEQUENCE contents
-    char *contents = (char*)malloc(data_length);
-    input.read(contents, data_length);
+    unsigned char *contents = (unsigned char*)malloc(data_length);
+    input.read((char *)contents, data_length);
     if (!input.good()) {
         fprintf(stderr, "Cannot get %d bytes of contents DER SEQUENCE: %s\n", data_length, strerror(errno));
         free(contents);
-        return "";
+        return OctetString();
     }
     der_bytes.append(contents, data_length);
     free(contents);
@@ -166,7 +167,7 @@ std::string get_der_sequence(std::istream &input)
 static int show_cert_file(std::istream &input, const char *filename)
 {
     fprintf(stderr, "show_cert_file: %s\n", filename);
-    std::list<Certificate*> certificates;
+    std::list<Certificate> certificates;
     while (1) {
         int c = input.peek();
         if (c == EOF) {
@@ -175,7 +176,7 @@ static int show_cert_file(std::istream &input, const char *filename)
             fprintf(stderr, "Cannot get first character of '%s': %s\n", filename, strerror(errno));
             return -1;
         }
-        std::string der_bytes;
+        OctetString der_bytes;
         if (c == '-') der_bytes = get_pem_cert(input);
         else if (c == 0x30) der_bytes = get_der_sequence(input);
         else {
@@ -187,8 +188,8 @@ static int show_cert_file(std::istream &input, const char *filename)
             return -1;
         }
 
-        Certificate *cert = new Certificate();
-        int err = x509_parse_der(der_bytes, *cert);
+        Certificate cert;
+        int err = der_decode_x509_certificate(der_bytes, cert);
         if (err) return -1;
         certificates.push_back(cert);
     }
@@ -199,22 +200,11 @@ static int show_cert_file(std::istream &input, const char *filename)
     }
 
     for (auto const &cert: certificates) {
-        printf("tbsCertificate.subject: %s\n", cert->tbs_certificate.subject.c_str());
-        printf("tbsCertificate.issuer: %s\n", cert->tbs_certificate.issuer.c_str());
-        printf("tbsCertificate.validity.notBefore: %s\n", cert->tbs_certificate.validity.not_before.c_str());
-        printf("tbsCertificate.validity.notAfter: %s\n", cert->tbs_certificate.validity.not_before.c_str());
-        for (auto const &ext: cert->tbs_certificate.extensions) {
-            assert(ext.second->get_type() == V_OBJECT);
-            Object *extension = dynamic_cast<Object*>(ext.second);
-            std::string oidname = oid_get_name(ext.first.c_str());
-            const char *longname_prefix = "tbsCertificate.extensions";
-            const Value *critical = extension->get("critical");
-            const Value *extn_value = extension->get("extn_value");
-            printf("%s.%s.critical: %s\n", longname_prefix, oidname.c_str(), critical->to_string().c_str());
-            printf("%s.%s.extnValue: %s\n", longname_prefix, oidname.c_str(), extn_value->to_string().c_str());
-        }
-        x509_free(*cert);
-        delete cert;
+        printf("tbsCertificate.subject: %s\n", hexlify(cert.tbs_certificate.subject).c_str());
+        printf("tbsCertificate.issuer: %s\n", hexlify(cert.tbs_certificate.issuer).c_str());
+        printf("tbsCertificate.validity.notBefore: %s\n", cert.tbs_certificate.validity.not_before.c_str());
+        printf("tbsCertificate.validity.notAfter: %s\n", cert.tbs_certificate.validity.not_before.c_str());
+        // TODO extensions
     }
 
     return 0;

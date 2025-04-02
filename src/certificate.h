@@ -9,6 +9,13 @@
 typedef std::string PropertyName;
 typedef std::string PropertyValue;
 typedef std::string ObjectIdentifier;
+typedef std::string Integer;
+typedef std::string IA5String;
+typedef OctetString AnotherName;
+typedef OctetString KeyIdentifier;
+typedef Integer CertificateSerialNumber;
+typedef OctetString Name;
+typedef OctetString GeneralNames;
 
 struct Extension {
     bool critical;
@@ -22,29 +29,34 @@ struct Extension {
     Extension& operator=(const Extension&) = delete;
 };
 
+struct AuthorityKeyIdentifier {
+    KeyIdentifier *key_identifier;
+    GeneralNames *authority_cert_issuer;
+    CertificateSerialNumber *authority_cert_serial_number;
+};
+
 struct AlgorithmIdentifier {
     std::string algorithm;
-    std::string parameters;
+    OctetString parameters;
 };
 
 struct Validity {
-    std::string not_before;
-    std::string not_after;
+    std::string not_before; // ISO 8601 without the 'T'
+    std::string not_after; // ISO 8601 without the 'T'
 };
 
 struct SubjectPublicKeyInfo {
     AlgorithmIdentifier algorithm;
     OctetString subject_public_key;
-
 };
 
 struct TBSCertificate {
-    long version;
-    std::string serial_number;
+    Integer version;
+    Integer serial_number;
     AlgorithmIdentifier signature;
-    std::string issuer;
+    Name issuer;
     Validity validity;
-    std::string subject;
+    Name subject;
     SubjectPublicKeyInfo subject_public_key_info;
     OctetString issuer_unique_id; // emtpy if not present
     OctetString subject_unique_id; // empty if not present
