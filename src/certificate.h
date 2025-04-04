@@ -50,8 +50,8 @@ struct AlgorithmIdentifier {
 };
 
 struct Validity {
-    std::string not_before; // ISO 8601 without the 'T'
-    std::string not_after; // ISO 8601 without the 'T'
+    std::string not_before; // Format YYYY-MM-DD hh:mm:ss.fff
+    std::string not_after; // Format YYYY-MM-DD hh:mm:ss.fff
 };
 
 struct SubjectPublicKeyInfo {

@@ -464,6 +464,92 @@ static int der_decode_x509_name(const OctetString &der_bytes, Name &name)
     return n_bytes_total;
 }
 
+/*
+ * Time ::= CHOICE {
+ *      utcTime        UTCTime,
+ *      generalTime    GeneralizedTime }
+ *
+ * UTCTime not supported as year is on 2 digits only.
+ * Expected formats:
+ * - YYYYMMDDhhmmss[.fff...]
+ * - 19920521000000.123Z
+ */
+static int der_decode_x509_time(const OctetString &der_bytes, std::string &time)
+{
+    DEBUG_DUMP("", der_bytes, 64);
+
+    size_t length;
+    int tag;
+    OctetString value;
+    int n_bytes = get_tag_length_value(der_bytes, tag, length, value);
+    if (n_bytes < 0) {
+        ERROR("cannot decode tag and length");
+        return -1;
+    }
+
+    std::string timetmp = std::string((char*)value.data(), value.size());
+    switch (tag) {
+    case V_ASN1_UTCTIME:
+        // Expect YYMMDDhhmmssZ
+        // Add "20" (for 21st century) at the beginning to complete the year on 4 digits
+        timetmp.insert(0, "20");
+    case V_ASN1_GENERALIZEDTIME:
+        // Expect YYYYMMDDhhmmss[.f...]Z
+        if (timetmp.size() < 14) {
+            // Unexpected. Do not parse
+            time = timetmp;
+        } else {
+            time = timetmp.substr(0, 4) + "-";
+            time += timetmp.substr(4, 2) + "-";
+            time += timetmp.substr(6, 2) + " ";
+            time += timetmp.substr(8, 2) + ":";
+            time += timetmp.substr(10, 2) + ":";
+            time += timetmp.substr(12, std::string::npos);
+        }
+        break;
+    defaut:
+        ERROR("cannot decode time");
+        return -1;
+    }
+
+    return n_bytes;
+}
+
+/*
+ * Validity ::= SEQUENCE {
+ *    notBefore      Time,
+ *    notAfter       Time  }
+ */
+static int der_decode_x509_validity(const OctetString &der_bytes, Validity &validity)
+{
+    OctetString value;
+    int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, value);
+    if (n_bytes_total < 0) {
+        ERROR("Cannot decode header");
+        return -1;
+    }
+
+    std::string not_before;
+    int n_bytes = der_decode_x509_time(value, not_before);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode notBbefore");
+        return -1;
+    }
+    value.erase(0, n_bytes);
+    std::string not_after;
+    n_bytes = der_decode_x509_time(value, not_after);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode notBbefore");
+        return -1;
+    }
+
+    validity.not_after = not_after;
+    validity.not_before = not_before;
+
+    return n_bytes_total;
+}
+
+
 /* Decode BasicConstraints (DER-encoded)
  *
  * BasicConstraints ::= SEQUENCE {
@@ -679,7 +765,6 @@ int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
  */
 int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, Value **out)
 {
-    //fprintf(stderr, "debug: der_decode_x509_authority_key_identifier: %s\n", hexlify(der_bytes).c_str());
     size_t length;
     int tag;
     OctetString value;
@@ -829,6 +914,13 @@ static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCert
     value.erase(0, n_bytes);
 
     n_bytes = der_decode_x509_name(value, tbs_certificate.issuer);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode issuer");
+        return -1;
+    }
+    value.erase(0, n_bytes);
+
+    n_bytes = der_decode_x509_validity(value, tbs_certificate.validity);
     if (n_bytes < 0) {
         ERROR("Cannot decode issuer");
         return -1;
