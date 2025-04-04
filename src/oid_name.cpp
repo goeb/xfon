@@ -9,6 +9,22 @@ struct Oid {
 };
 
 static const Oid OID_NAMES[] = {
+    { "2.5.4.3", "id-at-commonName", "common-name" },
+    { "2.5.4.4", "id-at-surname", "surname" },
+    { "2.5.4.5", "id-at-serialNumber", "serial-number" },
+    { "2.5.4.6", "id-at-countryName", "country" },
+    { "2.5.4.7", "id-at-localityName", "locality" },
+    { "2.5.4.8", "id-at-stateOrProvinceName", "state-or-province" },
+    { "2.5.4.10", "id-at-organizationName", "organization" },
+    { "2.5.4.11", "id-at-organizationalUnitName", "organizational-unit" },
+    { "2.5.4.12", "id-at-title", "title" },
+    { "2.5.4.41", "id-at-name", "name" },
+    { "2.5.4.42", "id-at-givenName", "given-name" },
+    { "2.5.4.43", "id-at-initials", "initials" },
+    { "2.5.4.44", "id-at-generationQualifier", "generation-qualifier" },
+    { "2.5.4.46", "id-at-dnQualifier", "dn-qualifier" },
+    { "2.5.4.65", "id-at-pseudonym", "pseudonym" },
+
     { "2.5.29.14", "id-ce-subjectKeyIdentifier", NULL },
     { "2.5.29.15", "id-ce-keyUsage", NULL },
     { "2.5.29.16", "id-ce-privateKeyUsagePeriod", NULL },
@@ -37,7 +53,9 @@ std::string oid_get_name(const std::string &oid, bool shortname)
 {
     const struct Oid *ptr_oid = OID_NAMES;
     while (ptr_oid->oid) {
-        if (oid == ptr_oid->oid) return shortname?ptr_oid->short_name:ptr_oid->long_name;
+        if (oid == ptr_oid->oid) {
+            return shortname?ptr_oid->short_name:ptr_oid->long_name;
+        }
         ptr_oid++;
     }
     return oid;

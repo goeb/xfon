@@ -6,6 +6,7 @@ AM_LDFLAGS =
 
 bin_PROGRAMS = xeert
 xeert_SOURCES = \
+			src/certificate.cpp \
 			src/cmd_diff.cpp \
 			src/cmd_grep.cpp \
 			src/cmd_show.cpp \
@@ -14,6 +15,7 @@ xeert_SOURCES = \
 			src/hierarchy.cpp \
 			src/oid_name.cpp \
 			src/parse_x509.cpp \
+			src/render_text.cpp \
 			src/util.cpp \
 			src/xeert.cpp
 

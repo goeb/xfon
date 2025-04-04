@@ -283,7 +283,7 @@ static int der_decode_bit_string(const OctetString &der_bytes, OctetString &data
     return n_bytes;
 }
 
-int der_decode_object_identifier(const OctetString &der_bytes, std::string &oid)
+int der_decode_object_identifier(const OctetString &der_bytes, ObjectIdentifier &oid)
 {
     DEBUG_DUMP("", der_bytes, 16);
     OctetString value;
@@ -352,6 +352,116 @@ static int der_decode_x509_algorithm_identifier(const OctetString &der_bytes, Al
     algoid.parameters = value;
 
     return n_bytes;
+}
+
+/**
+ * @brief der_decode_x509_attribute_value
+ * @param der_bytes
+ * @param attribute
+ * @return
+ *
+ * AttributeTypeAndValue   ::= SEQUENCE {
+ *         type    AttributeType,
+ *         value   AttributeValue }
+ */
+static int der_decode_x509_attribute_value(const OctetString &der_bytes, AttributeTypeAndValue &attribute)
+{
+    OctetString sequence;
+    int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequence);
+    if (n_bytes_total < 0) {
+        ERROR("Cannot decode header");
+        return -1;
+    }
+
+    ObjectIdentifier oid;
+    int n_bytes = der_decode_object_identifier(sequence, oid);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode OID");
+        return -1;
+    }
+    sequence.erase(0, n_bytes);
+
+    // The value can be of different types: PrintableString, UTF8String, etc.
+    size_t length;
+    int tag;
+    OctetString value;
+    n_bytes = get_tag_length_value(sequence, tag, length, value);
+    if (n_bytes <= 0) {
+        ERROR("cannot decode tag and length");
+        return -1;
+    }
+
+    switch (tag) {
+    case V_ASN1_UTF8STRING:
+    case V_ASN1_NUMERICSTRING:
+    case V_ASN1_PRINTABLESTRING:
+    case V_ASN1_T61STRING:
+    case V_ASN1_IA5STRING:
+    case V_ASN1_VISIBLESTRING:
+        attribute.value = std::string((char *)value.data(), value.size());
+        break;
+    default:
+        fprintf(stderr, "der_decode_object_identifier: unsupported value with tag=0x%X\n", tag);
+        attribute.value = "[der]";
+        attribute.value += hexlify(sequence);
+    }
+
+    attribute.type = oid;
+
+    return n_bytes_total;
+}
+
+/**
+ * @brief der_decode_x509_name
+ * @param der_bytes
+ * @param name
+ * @return
+ *
+ * Name ::= CHOICE { -- only one possibility for now --
+ *       rdnSequence  RDNSequence }
+ *
+ * RDNSequence ::= SEQUENCE OF RelativeDistinguishedName
+ *
+ * RelativeDistinguishedName ::= SET SIZE (1..MAX) OF AttributeTypeAndValue
+ */
+static int der_decode_x509_name(const OctetString &der_bytes, Name &name)
+{
+    DEBUG_DUMP("", der_bytes, 32);
+
+    // decode SEQUENCE OF header
+    OctetString sequenceof;
+    int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequenceof);
+    if (n_bytes_total < 0) {
+        ERROR("Cannot decode header");
+        return -1;
+    }
+
+    // while more in the SEQUENCE OF, decode SET OF
+    while (sequenceof.size()) {
+        OctetString setof;
+        int n_bytes_setof = der_decode_header(sequenceof, V_ASN1_SET, setof);
+        if (n_bytes_setof < 0) {
+            ERROR("Cannot decode header (SET OF)");
+            return -1;
+        }
+        // while more in each SET OF, decode AttributeTypeAndValue
+        std::set<AttributeTypeAndValue> attributes;
+        while (setof.size()) {
+            AttributeTypeAndValue attribute;
+            int n_bytes = der_decode_x509_attribute_value(setof, attribute);
+            if (n_bytes < 0) {
+                ERROR("Cannot decode attribute value");
+                return -1;
+            }
+            attributes.insert(attribute);
+            setof.erase(0, n_bytes);
+        }
+
+        name.push_back(attributes);
+        sequenceof.erase(0, n_bytes_setof);
+    }
+
+    return n_bytes_total;
 }
 
 /* Decode BasicConstraints (DER-encoded)
@@ -690,17 +800,41 @@ static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCert
 
     // extract the EXPLICIT tag of 'version'
     OctetString version;
-    int n_bytes_version = der_decode_header(value, 0, version);
-    if (n_bytes_version < 0) {
+    int n_bytes = der_decode_header(value, 0, version);
+    if (n_bytes < 0) {
         ERROR("Cannot decode version explicit tag");
         return -1;
     }
 
-    n_bytes_version = der_decode_integer(version, tbs_certificate.version);
+    int n_bytes_version = der_decode_integer(version, tbs_certificate.version);
     if (n_bytes_version < 0) {
         ERROR("cannot decode version");
         return -1;
     }
+
+    value.erase(0, n_bytes);
+
+    n_bytes = der_decode_integer(value, tbs_certificate.serial_number);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode serial number");
+        return -1;
+    }
+    value.erase(0, n_bytes);
+
+    n_bytes = der_decode_x509_algorithm_identifier(value, tbs_certificate.signature);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode signature");
+        return -1;
+    }
+    value.erase(0, n_bytes);
+
+    n_bytes = der_decode_x509_name(value, tbs_certificate.issuer);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode issuer");
+        return -1;
+    }
+    value.erase(0, n_bytes);
+
 // TODO
 
     return n_bytes_total;
@@ -758,6 +892,6 @@ int der_decode_x509_certificate(const OctetString &der_bytes, Certificate &cert)
         ERROR("warning: trailing garbage bytes not decoded (too many bytes)");
     }
 
-    return der_bytes.size();
+    return 0;
 }
 

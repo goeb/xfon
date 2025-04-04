@@ -12,8 +12,8 @@
 #include "cli.h"
 #include "cmd_show.h"
 #include "der_decode_x509.h"
-#include "oid_name.h"
 #include "parse_x509.h"
+#include "render_text.h"
 
 
 static error_t parse_opt(int key, char* arg, struct argp_state* state)
@@ -200,8 +200,8 @@ static int show_cert_file(std::istream &input, const char *filename)
     }
 
     for (auto const &cert: certificates) {
-        printf("tbsCertificate.subject: %s\n", hexlify(cert.tbs_certificate.subject).c_str());
-        printf("tbsCertificate.issuer: %s\n", hexlify(cert.tbs_certificate.issuer).c_str());
+        printf("tbsCertificate.subject: %s\n", x509_name_to_string(cert.tbs_certificate.subject).c_str());
+        printf("tbsCertificate.issuer: %s\n", x509_name_to_string(cert.tbs_certificate.issuer).c_str());
         printf("tbsCertificate.validity.notBefore: %s\n", cert.tbs_certificate.validity.not_before.c_str());
         printf("tbsCertificate.validity.notAfter: %s\n", cert.tbs_certificate.validity.not_before.c_str());
         // TODO extensions

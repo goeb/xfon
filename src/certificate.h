@@ -2,6 +2,7 @@
 #define CERTIFICATE_H
 
 #include <map>
+#include <set>
 #include <string>
 
 #include "data_model.h"
@@ -14,8 +15,16 @@ typedef std::string IA5String;
 typedef OctetString AnotherName;
 typedef OctetString KeyIdentifier;
 typedef Integer CertificateSerialNumber;
-typedef OctetString Name;
 typedef OctetString GeneralNames;
+
+struct AttributeTypeAndValue {
+    ObjectIdentifier type;
+    std::string value;
+    bool operator<(const AttributeTypeAndValue& other) const;
+    bool operator==(const AttributeTypeAndValue& other) const;
+};
+
+typedef std::list<std::set<AttributeTypeAndValue>> Name;
 
 struct Extension {
     bool critical;
