@@ -14,7 +14,6 @@ xeert_SOURCES = \
 			src/der_decode_x509.cpp \
 			src/hierarchy.cpp \
 			src/oid_name.cpp \
-			src/parse_x509.cpp \
 			src/render_text.cpp \
 			src/util.cpp \
 			src/xeert.cpp

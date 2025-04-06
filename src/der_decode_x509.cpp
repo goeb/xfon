@@ -14,7 +14,8 @@
                             fprintf(stderr, __VA_ARGS__); \
                             fprintf(stderr, "\n"); } while (0)
 
-#define DEBUG_DUMP(_msg, _bytes, _limit) do { fprintf(stderr, "%s: %s: ", __func__, _msg); \
+#define DEBUG_DUMP
+//#define DEBUG_DUMP(_msg, _bytes, _limit) do { fprintf(stderr, "%s: %s: ", __func__, _msg); \
                                               fprintf(stderr, hexlify(_bytes, _limit).c_str()); \
                                               fprintf(stderr, "\n"); } while (0)
 
@@ -922,12 +923,22 @@ static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCert
 
     n_bytes = der_decode_x509_validity(value, tbs_certificate.validity);
     if (n_bytes < 0) {
-        ERROR("Cannot decode issuer");
+        ERROR("Cannot decode validity");
         return -1;
     }
     value.erase(0, n_bytes);
 
-// TODO
+    n_bytes = der_decode_x509_name(value, tbs_certificate.subject);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode subject");
+        return -1;
+    }
+    value.erase(0, n_bytes);
+
+    // TODO subjectPublicKeyInfo
+    // TODO issuerUniqueID
+    // TODO subjectUniqueID
+    // TODO extensions
 
     return n_bytes_total;
 }

@@ -12,7 +12,6 @@
 #include "cli.h"
 #include "cmd_show.h"
 #include "der_decode_x509.h"
-#include "parse_x509.h"
 #include "render_text.h"
 
 
@@ -177,13 +176,19 @@ static int show_cert_file(std::istream &input, const char *filename)
             return -1;
         }
         OctetString der_bytes;
-        if (c == '-') der_bytes = get_pem_cert(input);
+        if (c == '-') {
+            der_bytes = get_pem_cert(input);
+            //fprintf(stderr, "xfhdebug: xfh.der\n");
+            //FILE *f = fopen("xfh.der", "w");
+            //fwrite(der_bytes.data(), der_bytes.size(), 1, f);
+            //fclose(f);
+        }
         else if (c == 0x30) der_bytes = get_der_sequence(input);
         else {
             fprintf(stderr, "Unknown certificate format: %s\n", filename);
             return -1;
         }
-        if (!der_bytes.size()) {
+        if (der_bytes.empty()) {
             fprintf(stderr, "Could not read PEM/DER from '%s'\n", filename);
             return -1;
         }
