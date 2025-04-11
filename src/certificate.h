@@ -4,6 +4,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <any>
 
 #include "data_model.h"
 
@@ -26,28 +27,71 @@ struct AttributeTypeAndValue {
 
 typedef std::list<std::set<AttributeTypeAndValue>> Name;
 
-struct Extension {
-    bool critical;
-    Value *extn_value;
-    Extension() : critical(false), extn_value(0) {}
-    ~Extension() {
-        if (extn_value) delete extn_value;
-    }
-    // Make it no copyable (because of the extn_value pointer that is not handled for copy)
-    Extension(const Extension&) = delete;
-    Extension& operator=(const Extension&) = delete;
+struct AuthorityKeyIdentifier {
+    KeyIdentifier key_identifier; // empty if not present
+    GeneralNames authority_cert_issuer; // empty if not present
+    CertificateSerialNumber authority_cert_serial_number; // empty if not present
 };
 
-struct AuthorityKeyIdentifier {
-    KeyIdentifier *key_identifier;
-    GeneralNames *authority_cert_issuer;
-    CertificateSerialNumber *authority_cert_serial_number;
+struct PrivateKeyUsagePeriod {
+    std::string not_before; // Format YYYY-MM-DD hh:mm:ss.fff
+    std::string not_after; // Format YYYY-MM-DD hh:mm:ss.fff
 };
+
+struct BasicConstraints {
+    bool ca;
+    Integer path_len_constraint; // empty if not present
+};
+
+typedef OctetString SubjectKeyIdentifier;
+typedef std::set<std::string> KeyUsage;
+typedef GeneralNames SubjectAltName;
+typedef GeneralNames IssuerAltName;
+
+struct Extension {
+    ObjectIdentifier extn_id; // OID in numeric decimal format. Eg: "2.5.29.14"
+    bool critical;
+    std::any extn_value;
+#if 0
+    union {
+        SubjectKeyIdentifier subject_key_identifier;
+        AuthorityKeyIdentifier authority_key_identifier;
+        KeyUsage key_usage;
+        PrivateKeyUsagePeriod private_key_usage_period;
+        OctetString certificate_policies;
+        OctetString policy_mappings;
+        SubjectAltName subject_alt_name;
+        IssuerAltName issuer_alt_name;
+        OctetString subject_directory_attributes;
+        BasicConstraints basic_constraints;
+        OctetString name_constraints;
+        OctetString policy_constraints ;
+        OctetString crl_distribution_points;
+        OctetString ext_key_usage_syntax;
+        OctetString inhibit_any_policy;
+        OctetString freshest_crl;
+        OctetString crl_number;
+        OctetString issuing_distribution_point;
+        OctetString delta_crl_indicator;
+        OctetString crl_reasons;
+        OctetString certificate_issuer;
+        OctetString hold_instruction_code;
+        OctetString invalidity_date;
+        OctetString other;
+    } extn_value;
+#endif
+};
+
+struct Extensions {
+    std::map<ObjectIdentifier, Extension> items;
+};
+
 
 struct AlgorithmIdentifier {
     std::string algorithm;
     OctetString parameters;
 };
+
 
 struct Validity {
     std::string not_before; // Format YYYY-MM-DD hh:mm:ss.fff
@@ -69,7 +113,7 @@ struct TBSCertificate {
     SubjectPublicKeyInfo subject_public_key_info;
     OctetString issuer_unique_id; // emtpy if not present
     OctetString subject_unique_id; // empty if not present
-    Object extensions;
+    Extensions extensions;
 };
 
 class Certificate {

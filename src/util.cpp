@@ -4,7 +4,7 @@ std::string hexlify(const unsigned char *data, size_t length, size_t limit)
 {
     std::string result;
     char buffer[3];
-    for (int i = 0; i < length; i++) {
+    for (size_t i = 0; i < length; i++) {
         if (limit > 0 && i >= limit) {
             result += "...";
             break;

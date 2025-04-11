@@ -60,3 +60,22 @@ std::string oid_get_name(const std::string &oid, bool shortname)
     }
     return oid;
 }
+
+/**
+ * Convert a name (long or short) to a numerical OID
+ *
+ * name can be a long or short name, or a numerical OID
+ * (no conversion is done in this latter case).
+ */
+std::string oid_get_id(const std::string &name)
+{
+    const struct Oid *ptr_oid = OID_NAMES;
+    while (ptr_oid->oid) {
+        if (name == ptr_oid->long_name) return ptr_oid->oid;
+        if (name == ptr_oid->short_name) return ptr_oid->oid;
+        if (name == ptr_oid->oid) return ptr_oid->oid;
+        ptr_oid++;
+    }
+    return ""; // not found
+}
+

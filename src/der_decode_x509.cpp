@@ -5,20 +5,25 @@
 #include <openssl/x509.h>
 #include <string>
 #include <sstream>
+#include <vector>
 
 #include "certificate.h"
 #include "der_decode_x509.h"
+#include "oid_name.h"
 #include "util.h"
+
+//#define DEBUG
 
 #define ERROR(...) do { fprintf(stderr, "%s: ", __func__); \
                             fprintf(stderr, __VA_ARGS__); \
                             fprintf(stderr, "\n"); } while (0)
-
-#define DEBUG_DUMP
-//#define DEBUG_DUMP(_msg, _bytes, _limit) do { fprintf(stderr, "%s: %s: ", __func__, _msg); \
+#ifdef DEBUG
+#define DEBUG_DUMP(_msg, _bytes, _limit) do { fprintf(stderr, "%s: %s: ", __func__, _msg); \
                                               fprintf(stderr, hexlify(_bytes, _limit).c_str()); \
                                               fprintf(stderr, "\n"); } while (0)
-
+#else
+#define DEBUG_DUMP(_msg, _bytes, _limit)
+#endif
 /**
  * @brief Get DER tag, length and value
  * @param[in] der_bytes
@@ -224,6 +229,27 @@ static int der_decode_boolean(const OctetString &der_bytes, size_t &i_start, siz
     return 0;
 }
 
+static int der_decode_boolean(const OctetString &der_bytes, bool &boolean)
+{
+    DEBUG_DUMP("", der_bytes, 16);
+    OctetString value;
+    int n_bytes = der_decode_header(der_bytes, V_ASN1_BOOLEAN, value);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode header");
+        return -1;
+    }
+
+    if (value.size() != 1) {
+        ERROR("Invalid payload (size %lu)", value.size());
+        return -1;
+    }
+    if (value[0]) boolean = true;
+    else boolean = false;
+
+    return n_bytes;
+}
+
+
 /**
  * @brief Decode a DER ASN1 OCTET STRING value
  * @param der_bytes
@@ -271,6 +297,7 @@ static int der_decode_octet_string(const OctetString &der_bytes, OctetString &da
     data = value;
     return n_bytes;
 }
+
 static int der_decode_bit_string(const OctetString &der_bytes, OctetString &data)
 {
     DEBUG_DUMP("", der_bytes, 16);
@@ -282,6 +309,37 @@ static int der_decode_bit_string(const OctetString &der_bytes, OctetString &data
     }
     data = value;
     return n_bytes;
+}
+
+static int der_decode_bit_string(const OctetString &der_bytes, std::vector<bool> &bits)
+{
+    DEBUG_DUMP("", der_bytes, 16);
+
+    OctetString value;
+    int n_bytes_total = der_decode_header(der_bytes, V_ASN1_BIT_STRING, value);
+    if (n_bytes_total < 0) {
+        ERROR("Cannot decode header");
+        return -1;
+    }
+
+    size_t size = value.size();
+
+    if (!size) {
+        ERROR("Empty value");
+        return -1;
+    }
+
+    unsigned int unused_bits = value[0];
+    for (size_t i=1; i<size; i++) {
+        unsigned char byte = value[i];
+        // get the bits of this byte
+        for (size_t j=0; j<8-unused_bits; j++) {
+            bool bit = (byte >> (8-j-1)) & 0x1;
+            bits.insert(bits.end(), bit);
+        }
+    }
+
+    return n_bytes_total;
 }
 
 int der_decode_object_identifier(const OctetString &der_bytes, ObjectIdentifier &oid)
@@ -508,7 +566,7 @@ static int der_decode_x509_time(const OctetString &der_bytes, std::string &time)
             time += timetmp.substr(12, std::string::npos);
         }
         break;
-    defaut:
+    default:
         ERROR("cannot decode time");
         return -1;
     }
@@ -546,6 +604,33 @@ static int der_decode_x509_validity(const OctetString &der_bytes, Validity &vali
 
     validity.not_after = not_after;
     validity.not_before = not_before;
+
+    return n_bytes_total;
+}
+
+static int der_decode_x509_subject_public_key_info(const OctetString &der_bytes, SubjectPublicKeyInfo &spki)
+{
+    OctetString value;
+    int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, value);
+    if (n_bytes_total < 0) {
+        ERROR("Cannot decode header");
+        return -1;
+    }
+
+
+    int n_bytes = der_decode_x509_algorithm_identifier(value, spki.algorithm);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode algorithm");
+        return -1;
+    }
+
+    value.erase(0, n_bytes);
+
+    n_bytes = der_decode_bit_string(value, spki.subject_public_key);
+    if (n_bytes < 0) {
+        ERROR("cannot decode bit string");
+        return -1;
+    }
 
     return n_bytes_total;
 }
@@ -613,6 +698,41 @@ int der_decode_x509_basic_constraints(const OctetString &der_bytes, size_t &i_st
     *out = obj;
     return 0;
 }
+
+static int der_decode_x509_basic_constraints(const OctetString &der_bytes, BasicConstraints &basic_constraints)
+{
+    DEBUG_DUMP("", der_bytes, 16);
+
+    OctetString sequence;
+    int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequence);
+    if (n_bytes_total < 0) {
+        ERROR("Cannot decode header");
+        return -1;
+    }
+
+    if (!sequence.empty() && sequence[0] == V_ASN1_BOOLEAN) {
+        // This is 'ca'
+        int n_bytes = der_decode_boolean(sequence, basic_constraints.ca);
+        if (n_bytes < 0) {
+            ERROR("Cannot decode boolean");
+            return -1;
+        }
+        sequence.erase(0, n_bytes);
+    } else {
+        // default value FALSE
+        basic_constraints.ca = false;
+    }
+
+    if (!sequence.empty()) {
+        int n_bytes = der_decode_integer(sequence, basic_constraints.path_len_constraint);
+        if (n_bytes < 0) {
+            ERROR("Cannot decode integer");
+            return -1;
+        }
+    }
+    return n_bytes_total;
+}
+
 
 /**
  * @brief der_decode_x509_subject_key_identifier
@@ -853,6 +973,202 @@ int der_decode_x509_key_usage(const OctetString &der_bytes, size_t &i_start, siz
     return 0;
 }
 
+/*
+ * KeyUsage ::= BIT STRING {
+ *      digitalSignature        (0),
+ *      nonRepudiation          (1),  -- recent editions of X.509 have
+ *                                 -- renamed this bit to contentCommitment
+ *      keyEncipherment         (2),
+ *      dataEncipherment        (3),
+ *      keyAgreement            (4),
+ *      keyCertSign             (5),
+ *      cRLSign                 (6),
+ *      encipherOnly            (7),
+ *      decipherOnly            (8) }
+ */
+static int der_decode_x509_key_usage(const OctetString &der_bytes, KeyUsage &key_usage)
+{
+    DEBUG_DUMP("", der_bytes, 16);
+
+    std::vector<bool> bits;
+    int n_bytes = der_decode_bit_string(der_bytes, bits);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode bit string");
+        return -1;
+    }
+
+    if (bits.size() > 9) {
+        ERROR("Bit string too long: %lu", bits.size());
+        return -1;
+    }
+
+    // pad with zeros to be sure to have 9 bits
+    bits.insert(bits.end(), 9 - bits.size(), 0);
+
+    if (bits[0]) key_usage.insert("digitalSignature");
+    if (bits[1]) key_usage.insert("nonRepudiation");
+    if (bits[2]) key_usage.insert("keyEncipherment");
+    if (bits[3]) key_usage.insert("dataEncipherment");
+    if (bits[4]) key_usage.insert("keyAgreement");
+    if (bits[5]) key_usage.insert("keyCertSign");
+    if (bits[6]) key_usage.insert("cRLSign");
+    if (bits[7]) key_usage.insert("encipherOnly");
+    if (bits[8]) key_usage.insert("decipherOnly");
+
+    return n_bytes;
+}
+
+
+/*
+ * Extension  ::=  SEQUENCE  {
+ *     extnID      OBJECT IDENTIFIER,
+ *     critical    BOOLEAN DEFAULT FALSE,
+ *     extnValue   OCTET STRING
+ *                 -- contains the DER encoding of an ASN.1 value
+ *                 -- corresponding to the extension type identified
+ *                 -- by extnID
+ *     }
+ */
+static int der_decode_x509_extension(const OctetString &der_bytes, Extension &extension)
+{
+    DEBUG_DUMP("", der_bytes, 16);
+
+    OctetString sequence;
+    int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequence);
+    if (n_bytes_total < 0) {
+        ERROR("Cannot decode header");
+        return -1;
+    }
+
+    int n_bytes = der_decode_object_identifier(sequence, extension.extn_id);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode header");
+        return -1;
+    }
+    sequence.erase(0, n_bytes);
+
+    if (sequence.empty()) {
+        ERROR("Missing field after extn_id");
+        return -1;
+    }
+
+    if (sequence[0] == V_ASN1_BOOLEAN) {
+        // This is 'critical'
+        n_bytes = der_decode_boolean(sequence, extension.critical);
+        if (n_bytes < 0) {
+            ERROR("Cannot decode boolean");
+            return -1;
+        }
+        sequence.erase(0, n_bytes);
+    } else {
+        // default value FALSE
+        extension.critical = false;
+    }
+
+    OctetString extn_value;
+    n_bytes = der_decode_octet_string(sequence, extn_value);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode extnValue octet string");
+        return -1;
+    }
+
+    std::string oid_name = oid_get_name(extension.extn_id);
+    if (oid_name == "id-ce-subjectKeyIdentifier") {
+        OctetString data;
+        int n_bytes = der_decode_octet_string(extn_value, data);
+        if (n_bytes < 0) {
+            ERROR("Cannot decode id-ce-subjectKeyIdentifier");
+            return -1;
+        }
+        extension.extn_value.emplace<SubjectKeyIdentifier>(data);
+    } else if (oid_name == "id-ce-keyUsage") {
+        KeyUsage key_usage;
+        int n_bytes = der_decode_x509_key_usage(extn_value, key_usage);
+        if (n_bytes < 0) {
+            ERROR("Cannot decode id-ce-keyUsage");
+            return -1;
+        }
+        extension.extn_value = key_usage;
+    } else if (oid_name == "id-ce-privateKeyUsagePeriod") {
+
+    } else if (oid_name == "id-ce-subjectAltName") {
+
+    } else if (oid_name == "id-ce-issuerAltName") {
+
+    } else if (oid_name == "id-ce-basicConstraints") {
+        BasicConstraints basic_constraints;
+        int n_bytes = der_decode_x509_basic_constraints(extn_value, basic_constraints);
+        if (n_bytes < 0) {
+            ERROR("Cannot decode id-ce-basicConstraints");
+            return -1;
+        }
+        extension.extn_value = basic_constraints;
+    } else if (oid_name == "id-ce-cRLNumber") {
+
+    } else if (oid_name == "id-ce-reasonCode") {
+
+    } else if (oid_name == "id-ce-instructionCode") {
+
+    } else if (oid_name == "id-ce-invalidityDate") {
+
+    } else if (oid_name == "id-ce-issuingDistributionPoint") {
+
+    } else if (oid_name == "id-ce-deltaCRLIndicator") {
+
+    } else if (oid_name == "id-ce-issuingDistributionPoint") {
+
+    } else if (oid_name == "id-ce-certificateIssuer") {
+
+    } else if (oid_name == "id-ce-nameConstraints") {
+
+    } else if (oid_name == "id-ce-cRLDistributionPoints") {
+
+    } else if (oid_name == "id-ce-certificatePolicies") {
+
+    } else if (oid_name == "id-ce-policyMappings") {
+
+    } else if (oid_name == "id-ce-authorityKeyIdentifier") {
+
+    } else if (oid_name == "id-ce-policyConstraints") {
+
+    } else if (oid_name == "id-ce-extKeyUsage") {
+
+    } else {
+        extension.extn_value = extn_value;
+    }
+
+    return n_bytes_total;
+}
+
+/*
+ * Extensions  ::=  SEQUENCE SIZE (1..MAX) OF Extension
+ */
+int der_decode_x509_extensions(const OctetString &der_bytes, Extensions &extensions)
+{
+    DEBUG_DUMP("", der_bytes, 16);
+
+    // decode SEQUENCE OF header
+    OctetString sequenceof;
+    int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequenceof);
+    if (n_bytes_total < 0) {
+        ERROR("Cannot decode header");
+        return -1;
+    }
+
+    // while more in the SEQUENCE OF, decode SET OF
+    while (sequenceof.size()) {
+        Extension extension;
+        int n_bytes = der_decode_x509_extension(sequenceof, extension);
+        if (n_bytes < 0) {
+            ERROR("Cannot decode extension");
+            return -1;
+        }
+        sequenceof.erase(0, n_bytes);
+    }
+
+    return n_bytes_total;
+}
+
 /**
  * @brief der_decode_x509_tbs_certificate
  * @param der_bytes
@@ -884,7 +1200,7 @@ static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCert
         return -1;
     }
 
-    // extract the EXPLICIT tag of 'version'
+    // extract the EXPLICIT tag [0] of 'version'
     OctetString version;
     int n_bytes = der_decode_header(value, 0, version);
     if (n_bytes < 0) {
@@ -935,10 +1251,58 @@ static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCert
     }
     value.erase(0, n_bytes);
 
-    // TODO subjectPublicKeyInfo
-    // TODO issuerUniqueID
-    // TODO subjectUniqueID
-    // TODO extensions
+    n_bytes = der_decode_x509_subject_public_key_info(value, tbs_certificate.subject_public_key_info);
+    if (n_bytes < 0) {
+        ERROR("Cannot decode subject_public_key_info");
+        return -1;
+    }
+    value.erase(0, n_bytes);
+
+    while (!value.empty()) {
+
+        // There are remaining bytes. Optional fields are expected.
+
+        size_t length;
+        int tag;
+        OctetString data;
+        n_bytes = get_tag_length_value(value, tag, length, data);
+        if (n_bytes <= 0) {
+            ERROR("cannot decode tag and length");
+            return -1;
+        }
+
+        value = data;
+        DEBUG_DUMP("", value, 16);
+
+        OctetString optional;
+        switch (tag) {
+        case 1: // issuerUniqueID
+            n_bytes = der_decode_bit_string(value, tbs_certificate.issuer_unique_id);
+            if (n_bytes < 0) {
+                ERROR("cannot decode issuer unique id");
+                return -1;
+            }
+            break;
+        case 2: // subjectUniqueID
+            n_bytes = der_decode_bit_string(value, tbs_certificate.subject_unique_id);
+            if (n_bytes < 0) {
+                ERROR("cannot decode subject unique id");
+                return -1;
+            }
+            break;
+        case 3: // extensions
+            n_bytes = der_decode_x509_extensions(value, tbs_certificate.extensions);
+            if (n_bytes < 0) {
+                ERROR("cannot decode extensions");
+                return -1;
+            }
+            break;
+        default:
+            ERROR("cannot decode optional fields: tag=0x%x", tag);
+            return -1;
+        }
+        value.erase(0, n_bytes);
+    }
 
     return n_bytes_total;
 }

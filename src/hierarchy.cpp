@@ -1,6 +1,7 @@
 #include <assert.h>
 
 #include "hierarchy.h"
+#include "oid_name.h"
 
 bool is_self_signed(const Certificate &cert)
 {
@@ -27,15 +28,10 @@ bool is_issuer(const Certificate &cert_issuer, const Certificate &cert_child)
 
     // Look at extensions
     // id-ce-authorityKeyIdentifier
-    const Value *akidv = cert_child.tbs_certificate.extensions.get("id-ce-authorityKeyIdentifier");
-    if (akidv) {
-        assert(akidv->get_type() == V_OBJECT);
-        const Object *akid = dynamic_cast<const Object *>(akidv);
-        const Value *extnvalue = akid->get("extnvalue");
-        assert(extnvalue);
-        assert(extnvalue->get_type() == V_OBJECT);
-        // TODO
-
+    auto it = cert_child.tbs_certificate.extensions.items.find(oid_get_id("id-ce-authorityKeyIdentifier"));
+    if (it != cert_child.tbs_certificate.extensions.items.end()) {
+        // Extension found
+        AuthorityKeyIdentifier akid = std::any_cast<AuthorityKeyIdentifier>(it->second.extn_value);
     }
 
     // Verify signature
