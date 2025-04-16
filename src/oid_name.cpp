@@ -32,10 +32,10 @@ static const Oid OID_NAMES[] = {
     { "2.5.29.18", "id-ce-issuerAltName", NULL },
     { "2.5.29.19", "id-ce-basicConstraints", NULL },
     { "2.5.29.20", "id-ce-cRLNumber", NULL },
-    { "2.5.29.21", "id-ce-reasonCode", NULL },
+    { "2.5.29.21", "id-ce-cRLReasons", NULL },
     { "2.5.29.22", "id-ce-instructionCode", NULL },
-    { "2.5.29.23", "id-ce-invalidityDate", NULL },
-    { "2.5.29.24", "id-ce-issuingDistributionPoint", NULL },
+    { "2.5.29.23", "id-ce-holdInstructionCode", NULL },
+    { "2.5.29.24", "id-ce-invalidityDate", NULL },
     { "2.5.29.27", "id-ce-deltaCRLIndicator", NULL },
     { "2.5.29.28", "id-ce-issuingDistributionPoint", NULL },
     { "2.5.29.29", "id-ce-certificateIssuer", NULL },
@@ -71,8 +71,8 @@ std::string oid_get_id(const std::string &name)
 {
     const struct Oid *ptr_oid = OID_NAMES;
     while (ptr_oid->oid) {
-        if (name == ptr_oid->long_name) return ptr_oid->oid;
-        if (name == ptr_oid->short_name) return ptr_oid->oid;
+        if (ptr_oid->long_name && name == ptr_oid->long_name) return ptr_oid->oid;
+        if (ptr_oid->short_name && name == ptr_oid->short_name) return ptr_oid->oid;
         if (name == ptr_oid->oid) return ptr_oid->oid;
         ptr_oid++;
     }

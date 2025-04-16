@@ -12,6 +12,7 @@
 #include "cli.h"
 #include "cmd_show.h"
 #include "der_decode_x509.h"
+#include "oid_name.h"
 #include "render_text.h"
 
 
@@ -205,11 +206,18 @@ static int show_cert_file(std::istream &input, const char *filename)
     }
 
     for (auto const &cert: certificates) {
-        printf("tbsCertificate.subject: %s\n", x509_name_to_string(cert.tbs_certificate.subject).c_str());
-        printf("tbsCertificate.issuer: %s\n", x509_name_to_string(cert.tbs_certificate.issuer).c_str());
+        printf("tbsCertificate.subject: %s\n", to_string(cert.tbs_certificate.subject).c_str());
+        printf("tbsCertificate.issuer: %s\n", to_string(cert.tbs_certificate.issuer).c_str());
         printf("tbsCertificate.validity.notBefore: %s\n", cert.tbs_certificate.validity.not_before.c_str());
         printf("tbsCertificate.validity.notAfter: %s\n", cert.tbs_certificate.validity.not_before.c_str());
+
         // TODO extensions
+        for (auto it: cert.tbs_certificate.extensions.items) {
+            if (it.first == oid_get_id("id-ce-basicConstraints")) {
+                BasicConstraints basic_constraints = std::any_cast<BasicConstraints>(it.second.extn_value);
+                printf("basicConstraints: %s\n", to_string(basic_constraints).c_str());
+            }
+        }
     }
 
     return 0;

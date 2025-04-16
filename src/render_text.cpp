@@ -1,7 +1,7 @@
 #include "oid_name.h"
 #include "render_text.h"
 
-std::string x509_name_to_string(const Name &name)
+std::string to_string(const Name &name)
 {
     std::string result;
     bool start = true;
@@ -17,3 +17,18 @@ std::string x509_name_to_string(const Name &name)
     return result;
 }
 
+std::string to_string(bool boolean)
+{
+    if (boolean) return "true";
+    else return "false";
+}
+
+std::string to_string(const BasicConstraints &basic_constraints)
+{
+    std::string result;
+    result += "cA:" + to_string(basic_constraints.ca);
+    if (!basic_constraints.path_len_constraint.empty()) {
+        result += ", pathLenConstraint: " + basic_constraints.path_len_constraint;
+    }
+    return result;
+}

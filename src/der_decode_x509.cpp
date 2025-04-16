@@ -523,6 +523,39 @@ static int der_decode_x509_name(const OctetString &der_bytes, Name &name)
     return n_bytes_total;
 }
 
+/**
+ * @brief Convert a GeneralizedTime payload to a YYYY-MM-dd hh:mm:ss... format
+ */
+static std::string generalized_time_to_string(const std::string &der_time)
+{
+    std::string result;
+    // Expect YYYYMMDDhhmmss[.f...]Z
+    if (result.size() < 14) {
+        // Unexpected. Do not parse
+        result = der_time;
+    } else {
+        result = der_time.substr(0, 4) + "-";
+        result += der_time.substr(4, 2) + "-";
+        result += der_time.substr(6, 2) + " ";
+        result += der_time.substr(8, 2) + ":";
+        result += der_time.substr(10, 2) + ":";
+        result += der_time.substr(12, std::string::npos);
+    }
+    return result;
+}
+
+static int der_decode_generalized_time(const OctetString &der_bytes, std::string &time)
+{
+    OctetString value;
+    int n_bytes_total = der_decode_header(der_bytes, V_ASN1_GENERALIZEDTIME, value);
+    if (n_bytes_total < 0) {
+        ERROR("Cannot decode header");
+        return -1;
+    }
+    time = generalized_time_to_string(std::string((char*)value.data(), value.size()));
+    return n_bytes_total;
+}
+
 /*
  * Time ::= CHOICE {
  *      utcTime        UTCTime,
@@ -553,18 +586,7 @@ static int der_decode_x509_time(const OctetString &der_bytes, std::string &time)
         // Add "20" (for 21st century) at the beginning to complete the year on 4 digits
         timetmp.insert(0, "20");
     case V_ASN1_GENERALIZEDTIME:
-        // Expect YYYYMMDDhhmmss[.f...]Z
-        if (timetmp.size() < 14) {
-            // Unexpected. Do not parse
-            time = timetmp;
-        } else {
-            time = timetmp.substr(0, 4) + "-";
-            time += timetmp.substr(4, 2) + "-";
-            time += timetmp.substr(6, 2) + " ";
-            time += timetmp.substr(8, 2) + ":";
-            time += timetmp.substr(10, 2) + ":";
-            time += timetmp.substr(12, std::string::npos);
-        }
+        time = generalized_time_to_string(timetmp);
         break;
     default:
         ERROR("cannot decode time");
@@ -864,6 +886,13 @@ int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
     return 0;
 }
 
+static int der_decode_x509_general_names(const OctetString &der_bytes, OctetString &value)
+{
+    // TODO log that this is not decoded
+    value = der_bytes;
+    return 0;
+}
+
 /**
  * @brief der_decode_x509_authority_key_identifier
  * @param der_bytes
@@ -948,6 +977,69 @@ error:
     if (authoritycertissuer) delete authoritycertissuer;
     if (authoritycertserialnumber) delete authoritycertserialnumber;
     return -1;
+}
+
+/**
+ *
+ * AuthorityKeyIdentifier ::= SEQUENCE {
+ *   keyIdentifier             [0] KeyIdentifier            OPTIONAL,
+ *   authorityCertIssuer       [1] GeneralNames             OPTIONAL,
+ *   authorityCertSerialNumber [2] CertificateSerialNumber  OPTIONAL }
+ *   -- authorityCertIssuer and authorityCertSerialNumber MUST both
+ *   -- be present or both be absent
+ *
+ * Eg:
+ * 3016   8014 EE5678837CBF5D942D231788D395370BE54723CC
+ * 308187 8014 BF5FB7D1CEDD1F86F45B55ACDCD710C20EA988E7
+ *        A16C A46A 3068 310B3009060355040613025553 3125 3023060355040A131C537461726669656C6420546563686E6F6C6F676965732C20496E632E31323030060355040B1329537461726669656C6420436C61737320322043657274696669636174696F6E20417574686F72697479
+ *        8201 00
+ *
+ */
+static int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, AuthorityKeyIdentifier &akid)
+{
+    // Set empty values for optional fields
+    akid.key_identifier = OctetString();
+    akid.authority_cert_issuer = OctetString();
+    akid.authority_cert_serial_number = "";
+
+    OctetString sequence;
+    int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequence);
+    if (n_bytes_total < 0) {
+        ERROR("Cannot decode header");
+        return -1;
+    }
+
+    while (sequence.size()) {
+        size_t length;
+        int tag;
+        OctetString field;
+        int n_bytes_field = get_tag_length_value(sequence, tag, length, field);
+        if (n_bytes_field <= 0) {
+            ERROR("cannot decode tag and length");
+            return -1;
+        }
+        if (0 == tag) {
+            akid.key_identifier = field;
+        } else if (1 == tag) {
+            der_decode_x509_general_names(field, akid.authority_cert_issuer);
+        } else if (2 == tag) {
+            // rebuild a full ASN1 DER INTEGER with universal tag and length
+            OctetString der_integer = field;
+            der_integer[0] = 0x2; // set a universal tag for INTEGER
+            size_t i=0;
+            int n_bytes_integer = der_decode_integer(der_integer, akid.authority_cert_serial_number);
+            if (n_bytes_integer < 0) {
+                ERROR("cannot decode integer");
+                return -1;
+            }
+        } else {
+            ERROR("invalid tag %d", tag);
+            return -1;
+        }
+        // Remove the consumed bytes
+        sequence.erase(0, n_bytes_field);
+    }
+    return n_bytes_total;
 }
 
 int der_decode_x509_key_usage(const OctetString &der_bytes, size_t &i_start, size_t i_end, Value **out)
@@ -1072,6 +1164,7 @@ static int der_decode_x509_extension(const OctetString &der_bytes, Extension &ex
         return -1;
     }
 
+    // TODO add warnings for fields below that are not fully decoded
     std::string oid_name = oid_get_name(extension.extn_id);
     if (oid_name == "id-ce-subjectKeyIdentifier") {
         OctetString data;
@@ -1090,11 +1183,15 @@ static int der_decode_x509_extension(const OctetString &der_bytes, Extension &ex
         }
         extension.extn_value = key_usage;
     } else if (oid_name == "id-ce-privateKeyUsagePeriod") {
-
+        extension.extn_value = extn_value;
     } else if (oid_name == "id-ce-subjectAltName") {
-
+        OctetString value;
+        der_decode_x509_general_names(extn_value, value);
+        extension.extn_value = value;
     } else if (oid_name == "id-ce-issuerAltName") {
-
+        OctetString value;
+        der_decode_x509_general_names(extn_value, value);
+        extension.extn_value = value;
     } else if (oid_name == "id-ce-basicConstraints") {
         BasicConstraints basic_constraints;
         int n_bytes = der_decode_x509_basic_constraints(extn_value, basic_constraints);
@@ -1104,35 +1201,51 @@ static int der_decode_x509_extension(const OctetString &der_bytes, Extension &ex
         }
         extension.extn_value = basic_constraints;
     } else if (oid_name == "id-ce-cRLNumber") {
-
-    } else if (oid_name == "id-ce-reasonCode") {
-
+        extension.extn_value = extn_value;
+    } else if (oid_name == "id-ce-cRLReasons") {
+        extension.extn_value = extn_value;
     } else if (oid_name == "id-ce-instructionCode") {
-
+        extension.extn_value = extn_value;
+    } else if (oid_name == "id-ce-holdInstructionCode") {
+        extension.extn_value = extn_value;
     } else if (oid_name == "id-ce-invalidityDate") {
-
+        std::string time;
+        int n_bytes = der_decode_generalized_time(extn_value, time);
+        if (n_bytes < 0) {
+            ERROR("Cannot decode id-ce-invalidityDate");
+            return -1;
+        }
+        extension.extn_value = time;
     } else if (oid_name == "id-ce-issuingDistributionPoint") {
-
+        extension.extn_value = extn_value;
     } else if (oid_name == "id-ce-deltaCRLIndicator") {
-
+        extension.extn_value = extn_value;
     } else if (oid_name == "id-ce-issuingDistributionPoint") {
-
+        extension.extn_value = extn_value;
     } else if (oid_name == "id-ce-certificateIssuer") {
-
+        OctetString value;
+        der_decode_x509_general_names(extn_value, value);
+        extension.extn_value = value;
     } else if (oid_name == "id-ce-nameConstraints") {
-
+        extension.extn_value = extn_value;
     } else if (oid_name == "id-ce-cRLDistributionPoints") {
-
+        extension.extn_value = extn_value;
     } else if (oid_name == "id-ce-certificatePolicies") {
-
+        extension.extn_value = extn_value;
     } else if (oid_name == "id-ce-policyMappings") {
-
+        extension.extn_value = extn_value;
     } else if (oid_name == "id-ce-authorityKeyIdentifier") {
-
+        AuthorityKeyIdentifier akid;
+        int n_bytes = der_decode_x509_authority_key_identifier(extn_value, akid);
+        if (n_bytes < 0) {
+            ERROR("Cannot decode id-ce-authorityKeyIdentifier");
+            return -1;
+        }
+        extension.extn_value = akid;
     } else if (oid_name == "id-ce-policyConstraints") {
-
+        extension.extn_value = extn_value;
     } else if (oid_name == "id-ce-extKeyUsage") {
-
+        extension.extn_value = extn_value;
     } else {
         extension.extn_value = extn_value;
     }
@@ -1163,6 +1276,7 @@ int der_decode_x509_extensions(const OctetString &der_bytes, Extensions &extensi
             ERROR("Cannot decode extension");
             return -1;
         }
+        extensions.items[extension.extn_id] = extension;
         sequenceof.erase(0, n_bytes);
     }
 
