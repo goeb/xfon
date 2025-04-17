@@ -519,8 +519,9 @@ static std::string generalized_time_to_string(const std::string &der_time)
 {
     std::string result;
     // Expect YYYYMMDDhhmmss[.f...]Z
-    if (result.size() < 14) {
+    if (der_time.size() < 14) {
         // Unexpected. Do not parse
+        LOGDEBUG("unexpected format of time: %s", der_time.c_str());
         result = der_time;
     } else {
         result = der_time.substr(0, 4) + "-";
@@ -535,6 +536,7 @@ static std::string generalized_time_to_string(const std::string &der_time)
 
 static int der_decode_generalized_time(const OctetString &der_bytes, std::string &time)
 {
+    LOGHEX("", der_bytes, 32);
     OctetString value;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_GENERALIZEDTIME, value);
     if (n_bytes_total < 0) {
@@ -599,22 +601,17 @@ static int der_decode_x509_validity(const OctetString &der_bytes, Validity &vali
         return -1;
     }
 
-    std::string not_before;
-    int n_bytes = der_decode_x509_time(value, not_before);
+    int n_bytes = der_decode_x509_time(value, validity.not_before);
     if (n_bytes < 0) {
         LOGERROR("Cannot decode notBbefore");
         return -1;
     }
     value.erase(0, n_bytes);
-    std::string not_after;
-    n_bytes = der_decode_x509_time(value, not_after);
+    n_bytes = der_decode_x509_time(value, validity.not_after);
     if (n_bytes < 0) {
         LOGERROR("Cannot decode notBbefore");
         return -1;
     }
-
-    validity.not_after = not_after;
-    validity.not_before = not_before;
 
     return n_bytes_total;
 }

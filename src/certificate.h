@@ -123,6 +123,8 @@ public:
     AlgorithmIdentifier signature_algorithm;
     OctetString signature_value;
     void *opaque; // conveys data in a format specific to the back-end crypto lib
+    std::string filename;
+    size_t index_in_file;
 };
 
 #endif

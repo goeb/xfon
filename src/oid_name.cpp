@@ -9,14 +9,14 @@ struct Oid {
 };
 
 static const Oid OID_NAMES[] = {
-    { "2.5.4.3", "id-at-commonName", "common-name" },
-    { "2.5.4.4", "id-at-surname", "surname" },
-    { "2.5.4.5", "id-at-serialNumber", "serial-number" },
+    { "2.5.4.3", "id-at-commonName", "cn" },
+    { "2.5.4.4", "id-at-surname", "sn" },
+    { "2.5.4.5", "id-at-serialNumber", "serial" },
     { "2.5.4.6", "id-at-countryName", "country" },
-    { "2.5.4.7", "id-at-localityName", "locality" },
-    { "2.5.4.8", "id-at-stateOrProvinceName", "state-or-province" },
-    { "2.5.4.10", "id-at-organizationName", "organization" },
-    { "2.5.4.11", "id-at-organizationalUnitName", "organizational-unit" },
+    { "2.5.4.7", "id-at-localityName", "L" },
+    { "2.5.4.8", "id-at-stateOrProvinceName", "ST" },
+    { "2.5.4.10", "id-at-organizationName", "O" },
+    { "2.5.4.11", "id-at-organizationalUnitName", "OU" },
     { "2.5.4.12", "id-at-title", "title" },
     { "2.5.4.41", "id-at-name", "name" },
     { "2.5.4.42", "id-at-givenName", "given-name" },

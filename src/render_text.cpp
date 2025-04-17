@@ -32,3 +32,19 @@ std::string to_string(const BasicConstraints &basic_constraints)
     }
     return result;
 }
+
+std::string to_string(const Certificate &cert, const IndentationContext &indent_ctx)
+{
+    std::string result;
+    result += "│ " + to_string(cert.tbs_certificate.subject) + "\n";
+    result += "│ " + cert.tbs_certificate.validity.not_before + " .. " + cert.tbs_certificate.validity.not_after + "\n";
+    result += "└──────────────────────────────────────────────────────────────────────────────\n";
+    // TODO extensions
+    for (auto it: cert.tbs_certificate.extensions.items) {
+        if (it.first == oid_get_id("id-ce-basicConstraints")) {
+            BasicConstraints basic_constraints = std::any_cast<BasicConstraints>(it.second.extn_value);
+            //printf("basicConstraints: %s\n", to_string(basic_constraints).c_str());
+        }
+    }
+    return result;
+}

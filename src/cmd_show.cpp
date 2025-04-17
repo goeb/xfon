@@ -174,7 +174,8 @@ OctetString get_der_sequence(std::istream &input)
 
 static int show_cert_file(std::istream &input, const char *filename)
 {
-    fprintf(stderr, "show_cert_file: %s\n", filename);
+    LOGDEBUG("%s", filename);
+    size_t index = 0;
     std::list<Certificate> certificates;
     while (1) {
         int c = input.peek();
@@ -203,9 +204,12 @@ static int show_cert_file(std::istream &input, const char *filename)
         }
 
         Certificate cert;
+        cert.filename = filename;
+        cert.index_in_file = index;
         int err = der_decode_x509_certificate(der_bytes, cert);
         if (err) return -1;
         certificates.push_back(cert);
+        index++;
     }
 
     if (certificates.empty()) {
@@ -214,18 +218,7 @@ static int show_cert_file(std::istream &input, const char *filename)
     }
 
     for (auto const &cert: certificates) {
-        printf("tbsCertificate.subject: %s\n", to_string(cert.tbs_certificate.subject).c_str());
-        printf("tbsCertificate.issuer: %s\n", to_string(cert.tbs_certificate.issuer).c_str());
-        printf("tbsCertificate.validity.notBefore: %s\n", cert.tbs_certificate.validity.not_before.c_str());
-        printf("tbsCertificate.validity.notAfter: %s\n", cert.tbs_certificate.validity.not_before.c_str());
-
-        // TODO extensions
-        for (auto it: cert.tbs_certificate.extensions.items) {
-            if (it.first == oid_get_id("id-ce-basicConstraints")) {
-                BasicConstraints basic_constraints = std::any_cast<BasicConstraints>(it.second.extn_value);
-                printf("basicConstraints: %s\n", to_string(basic_constraints).c_str());
-            }
-        }
+        printf("%s", to_string(cert).c_str());
     }
 
     return 0;
