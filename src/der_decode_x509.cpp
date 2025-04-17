@@ -9,21 +9,10 @@
 
 #include "certificate.h"
 #include "der_decode_x509.h"
+#include "journal.h"
 #include "oid_name.h"
 #include "util.h"
 
-//#define DEBUG
-
-#define ERROR(...) do { fprintf(stderr, "%s: ", __func__); \
-                            fprintf(stderr, __VA_ARGS__); \
-                            fprintf(stderr, "\n"); } while (0)
-#ifdef DEBUG
-#define DEBUG_DUMP(_msg, _bytes, _limit) do { fprintf(stderr, "%s: %s: ", __func__, _msg); \
-                                              fprintf(stderr, hexlify(_bytes, _limit).c_str()); \
-                                              fprintf(stderr, "\n"); } while (0)
-#else
-#define DEBUG_DUMP(_msg, _bytes, _limit)
-#endif
 /**
  * @brief Get DER tag, length and value
  * @param[in] der_bytes
@@ -34,7 +23,7 @@
  */
 static int get_tag_length_value(const OctetString &der_bytes, int &tag, size_t &length, OctetString &value)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
     long len_value;
     int xclass;
     const unsigned char *ptr = der_bytes.data();
@@ -51,17 +40,17 @@ static int get_tag_length_value(const OctetString &der_bytes, int &tag, size_t &
 
 static int der_decode_header(const OctetString &der_bytes, int expected_tag, OctetString &value)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
     size_t length;
     int tag;
     OctetString data;
     int n_bytes = get_tag_length_value(der_bytes, tag, length, data);
     if (n_bytes <= 0) {
-        ERROR("cannot decode tag and length");
+        LOGERROR("cannot decode tag and length");
         return -1;
     }
     if (tag != expected_tag) {
-        ERROR("Unexpected tag 0x%X (expected was 0x%X)", tag, expected_tag);
+        LOGERROR("Unexpected tag 0x%X (expected was 0x%X)", tag, expected_tag);
         return -1;
     }
     value = data;
@@ -78,11 +67,11 @@ static int der_decode_header(const OctetString &der_bytes, int expected_tag, Oct
 static int der_decode_data_size(OctetString &der_bytes)
 {
     if (der_bytes.empty()) {
-        ERROR("empty");
+        LOGERROR("empty");
         return -1;
     }
     if (der_bytes.size() < 2) {
-        ERROR("missing first byte");
+        LOGERROR("missing first byte");
         return -1;
     }
     int size = 0;
@@ -90,14 +79,14 @@ static int der_decode_data_size(OctetString &der_bytes)
         // Length encoded on multibytes, big-endian
         size_t n_bytes = (unsigned char)der_bytes[0] & 0x7f;
         if (n_bytes+1 > der_bytes.size()) {
-            ERROR("too short");
+            LOGERROR("too short");
             return -1;
         }
 
         for (size_t i=1; i<n_bytes+1; i++) {
             if (size > (INT_MAX >> 8 )) {
                 // unsigned integer overflow
-                ERROR("error: overflow");
+                LOGERROR("LOGERROR: overflow");
                 return -1;
             }
             size = (size << 8) + der_bytes[i];
@@ -131,7 +120,7 @@ static int der_decode_integer(const OctetString &der_bytes, size_t &i_start, siz
     const unsigned char *ptr = der_bytes.data()+i_start;
     ASN1_INTEGER *integer = d2i_ASN1_INTEGER(NULL, &ptr, i_end - i_start);
     if (!integer) {
-        ERROR("error");
+        LOGERROR("error");
         return -1;
     }
     if (integer->type == V_ASN1_NEG_INTEGER) integer_string = "-";
@@ -153,22 +142,22 @@ static int der_decode_integer(const OctetString &der_bytes, size_t &i_start, siz
  */
 static int der_decode_integer(const OctetString &der_bytes, Integer &value)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
     size_t length;
     int tag;
     OctetString data;
     int n_bytes = get_tag_length_value(der_bytes, tag, length, data);
     if (n_bytes < 0) {
-        ERROR("cannot decode tag and length");
+        LOGERROR("cannot decode tag and length");
         return -1;
     }
     if (tag != V_ASN1_INTEGER) {
-        ERROR("not an integer. tag=0x%X", tag);
+        LOGERROR("not an integer. tag=0x%X", tag);
         return -1;
     }
 
     if (data.empty()) {
-        ERROR("empty integer");
+        LOGERROR("empty integer");
         return -1;
     }
 
@@ -210,15 +199,15 @@ static int der_decode_boolean(const OctetString &der_bytes, size_t &i_start, siz
     assert(i_end <= der_bytes.size());
     *out = NULL;
     if (i_end - i_start < 3) {
-        ERROR("error: size too short %lu", der_bytes.size());
+        LOGERROR("error: size too short %lu", der_bytes.size());
         return -1;
     }
     if (der_bytes[i_start] != 0x01) {
-        ERROR("error: invalid tag 0x%X", der_bytes[i_start]);
+        LOGERROR("error: invalid tag 0x%X", der_bytes[i_start]);
         return -1;
     }
     if (der_bytes[i_start+1] != 0x01) {
-        ERROR("error: invalid size 0x%X", der_bytes[i_start+1]);
+        LOGERROR("error: invalid size 0x%X", der_bytes[i_start+1]);
         return -1;
     }
 
@@ -231,16 +220,16 @@ static int der_decode_boolean(const OctetString &der_bytes, size_t &i_start, siz
 
 static int der_decode_boolean(const OctetString &der_bytes, bool &boolean)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
     OctetString value;
     int n_bytes = der_decode_header(der_bytes, V_ASN1_BOOLEAN, value);
     if (n_bytes < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
     if (value.size() != 1) {
-        ERROR("Invalid payload (size %lu)", value.size());
+        LOGERROR("Invalid payload (size %lu)", value.size());
         return -1;
     }
     if (value[0]) boolean = true;
@@ -267,7 +256,7 @@ static int der_decode_octet_string(const OctetString &der_bytes, size_t &i_start
     const unsigned char *ptr = der_bytes.data()+i_start;
     ASN1_INTEGER *octetstring = d2i_ASN1_OCTET_STRING(NULL, &ptr, i_end - i_start);
     if (!octetstring) {
-        ERROR("error");
+        LOGERROR("error");
         return -1;
     }
     i_start = ptr - der_bytes.data(); // move the index forward to consume the bytes
@@ -287,11 +276,11 @@ static int der_decode_octet_string(const OctetString &der_bytes, size_t &i_start
  */
 static int der_decode_octet_string(const OctetString &der_bytes, OctetString &data)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
     OctetString value;
     int n_bytes = der_decode_header(der_bytes, V_ASN1_OCTET_STRING, value);
     if (n_bytes < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
     data = value;
@@ -300,11 +289,11 @@ static int der_decode_octet_string(const OctetString &der_bytes, OctetString &da
 
 static int der_decode_bit_string(const OctetString &der_bytes, OctetString &data)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
     OctetString value;
     int n_bytes = der_decode_header(der_bytes, V_ASN1_BIT_STRING, value);
     if (n_bytes < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
     data = value;
@@ -313,19 +302,19 @@ static int der_decode_bit_string(const OctetString &der_bytes, OctetString &data
 
 static int der_decode_bit_string(const OctetString &der_bytes, std::vector<bool> &bits)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
 
     OctetString value;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_BIT_STRING, value);
     if (n_bytes_total < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
     size_t size = value.size();
 
     if (!size) {
-        ERROR("Empty value");
+        LOGERROR("Empty value");
         return -1;
     }
 
@@ -344,11 +333,11 @@ static int der_decode_bit_string(const OctetString &der_bytes, std::vector<bool>
 
 int der_decode_object_identifier(const OctetString &der_bytes, ObjectIdentifier &oid)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
     OctetString value;
     int n_bytes = der_decode_header(der_bytes, V_ASN1_OBJECT, value);
     if (n_bytes < 0 || value.empty()) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
@@ -364,7 +353,7 @@ int der_decode_object_identifier(const OctetString &der_bytes, ObjectIdentifier 
             // multi-byte series
             current += value[i] & 0x7f;
             if (UINT_MAX >> 3 < current) {
-                ERROR("Integer overflow");
+                LOGERROR("Integer overflow");
                 return -1;
             }
             current = current << 3;
@@ -393,16 +382,16 @@ int der_decode_object_identifier(const OctetString &der_bytes, ObjectIdentifier 
  */
 static int der_decode_x509_algorithm_identifier(const OctetString &der_bytes, AlgorithmIdentifier &algoid)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
     OctetString value;
     int n_bytes = der_decode_header(der_bytes, V_ASN1_SEQUENCE, value);
     if (n_bytes < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
     int n_bytes_algorithm = der_decode_object_identifier(value, algoid.algorithm);
     if (n_bytes_algorithm < 0) {
-        ERROR("Cannot decode algorithm");
+        LOGERROR("Cannot decode algorithm");
         return -1;
     }
 
@@ -428,14 +417,14 @@ static int der_decode_x509_attribute_value(const OctetString &der_bytes, Attribu
     OctetString sequence;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequence);
     if (n_bytes_total < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
     ObjectIdentifier oid;
     int n_bytes = der_decode_object_identifier(sequence, oid);
     if (n_bytes < 0) {
-        ERROR("Cannot decode OID");
+        LOGERROR("Cannot decode OID");
         return -1;
     }
     sequence.erase(0, n_bytes);
@@ -446,7 +435,7 @@ static int der_decode_x509_attribute_value(const OctetString &der_bytes, Attribu
     OctetString value;
     n_bytes = get_tag_length_value(sequence, tag, length, value);
     if (n_bytes <= 0) {
-        ERROR("cannot decode tag and length");
+        LOGERROR("cannot decode tag and length");
         return -1;
     }
 
@@ -485,13 +474,13 @@ static int der_decode_x509_attribute_value(const OctetString &der_bytes, Attribu
  */
 static int der_decode_x509_name(const OctetString &der_bytes, Name &name)
 {
-    DEBUG_DUMP("", der_bytes, 32);
+    LOGHEX("", der_bytes, 32);
 
     // decode SEQUENCE OF header
     OctetString sequenceof;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequenceof);
     if (n_bytes_total < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
@@ -500,7 +489,7 @@ static int der_decode_x509_name(const OctetString &der_bytes, Name &name)
         OctetString setof;
         int n_bytes_setof = der_decode_header(sequenceof, V_ASN1_SET, setof);
         if (n_bytes_setof < 0) {
-            ERROR("Cannot decode header (SET OF)");
+            LOGERROR("Cannot decode header (SET OF)");
             return -1;
         }
         // while more in each SET OF, decode AttributeTypeAndValue
@@ -509,7 +498,7 @@ static int der_decode_x509_name(const OctetString &der_bytes, Name &name)
             AttributeTypeAndValue attribute;
             int n_bytes = der_decode_x509_attribute_value(setof, attribute);
             if (n_bytes < 0) {
-                ERROR("Cannot decode attribute value");
+                LOGERROR("Cannot decode attribute value");
                 return -1;
             }
             attributes.insert(attribute);
@@ -549,7 +538,7 @@ static int der_decode_generalized_time(const OctetString &der_bytes, std::string
     OctetString value;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_GENERALIZEDTIME, value);
     if (n_bytes_total < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
     time = generalized_time_to_string(std::string((char*)value.data(), value.size()));
@@ -568,14 +557,14 @@ static int der_decode_generalized_time(const OctetString &der_bytes, std::string
  */
 static int der_decode_x509_time(const OctetString &der_bytes, std::string &time)
 {
-    DEBUG_DUMP("", der_bytes, 64);
+    LOGHEX("", der_bytes, 64);
 
     size_t length;
     int tag;
     OctetString value;
     int n_bytes = get_tag_length_value(der_bytes, tag, length, value);
     if (n_bytes < 0) {
-        ERROR("cannot decode tag and length");
+        LOGERROR("cannot decode tag and length");
         return -1;
     }
 
@@ -589,7 +578,7 @@ static int der_decode_x509_time(const OctetString &der_bytes, std::string &time)
         time = generalized_time_to_string(timetmp);
         break;
     default:
-        ERROR("cannot decode time");
+        LOGERROR("cannot decode time");
         return -1;
     }
 
@@ -606,21 +595,21 @@ static int der_decode_x509_validity(const OctetString &der_bytes, Validity &vali
     OctetString value;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, value);
     if (n_bytes_total < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
     std::string not_before;
     int n_bytes = der_decode_x509_time(value, not_before);
     if (n_bytes < 0) {
-        ERROR("Cannot decode notBbefore");
+        LOGERROR("Cannot decode notBbefore");
         return -1;
     }
     value.erase(0, n_bytes);
     std::string not_after;
     n_bytes = der_decode_x509_time(value, not_after);
     if (n_bytes < 0) {
-        ERROR("Cannot decode notBbefore");
+        LOGERROR("Cannot decode notBbefore");
         return -1;
     }
 
@@ -635,14 +624,14 @@ static int der_decode_x509_subject_public_key_info(const OctetString &der_bytes,
     OctetString value;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, value);
     if (n_bytes_total < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
 
     int n_bytes = der_decode_x509_algorithm_identifier(value, spki.algorithm);
     if (n_bytes < 0) {
-        ERROR("Cannot decode algorithm");
+        LOGERROR("Cannot decode algorithm");
         return -1;
     }
 
@@ -650,7 +639,7 @@ static int der_decode_x509_subject_public_key_info(const OctetString &der_bytes,
 
     n_bytes = der_decode_bit_string(value, spki.subject_public_key);
     if (n_bytes < 0) {
-        ERROR("cannot decode bit string");
+        LOGERROR("cannot decode bit string");
         return -1;
     }
 
@@ -676,11 +665,11 @@ int der_decode_x509_basic_constraints(const OctetString &der_bytes, size_t &i_st
     OctetString fields;
     int n_bytes = get_tag_length_value(der_bytes, tag, length, fields);
     if (n_bytes < 0) {
-        ERROR("cannot decode tag and length");
+        LOGERROR("cannot decode tag and length");
         return -1;
     }
     if (tag != V_ASN1_SEQUENCE) {
-        ERROR("not a sequence. tag=0x%X", tag);
+        LOGERROR("not a sequence. tag=0x%X", tag);
         return -1;
     }
     // Possible cases here:
@@ -723,12 +712,12 @@ int der_decode_x509_basic_constraints(const OctetString &der_bytes, size_t &i_st
 
 static int der_decode_x509_basic_constraints(const OctetString &der_bytes, BasicConstraints &basic_constraints)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
 
     OctetString sequence;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequence);
     if (n_bytes_total < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
@@ -736,7 +725,7 @@ static int der_decode_x509_basic_constraints(const OctetString &der_bytes, Basic
         // This is 'ca'
         int n_bytes = der_decode_boolean(sequence, basic_constraints.ca);
         if (n_bytes < 0) {
-            ERROR("Cannot decode boolean");
+            LOGERROR("Cannot decode boolean");
             return -1;
         }
         sequence.erase(0, n_bytes);
@@ -748,7 +737,7 @@ static int der_decode_x509_basic_constraints(const OctetString &der_bytes, Basic
     if (!sequence.empty()) {
         int n_bytes = der_decode_integer(sequence, basic_constraints.path_len_constraint);
         if (n_bytes < 0) {
-            ERROR("Cannot decode integer");
+            LOGERROR("Cannot decode integer");
             return -1;
         }
     }
@@ -777,7 +766,7 @@ std::string get_bio_mem_string(BIO *buffer)
     char *ptr;
     long datalen = BIO_get_mem_data(buffer, &ptr);
     if (datalen < 0 || !ptr) {
-        ERROR("BIO_get_mem_data error");
+        LOGERROR("BIO_get_mem_data error");
         return "";
     }
     return std::string(ptr, datalen);
@@ -790,13 +779,13 @@ static int der_decode_x509_name(const OctetString &der_bytes, Value **out)
     const unsigned char *ptr = der_bytes.data();
     X509_NAME *name = d2i_X509_NAME(NULL, &ptr, der_bytes.size());
     if (!name) {
-        ERROR("error while parsing %s", hexlify(der_bytes).c_str());
+        LOGERROR("error while parsing %s", hexlify(der_bytes).c_str());
         return -1;
     }
     BIO *buffer = BIO_new(BIO_s_mem());
     int err = X509_NAME_print_ex(buffer, name, 0, 0);
     if (err < 0) {
-        ERROR("error while converting %s", hexlify(der_bytes).c_str());
+        LOGERROR("error while converting %s", hexlify(der_bytes).c_str());
         ret = -1;
     } else *out = new String(get_bio_mem_string(buffer));
 
@@ -834,7 +823,7 @@ int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
         OctetString field;
         int n_bytes = get_tag_length_value(der_bytes, tag, length, field);
         if (n_bytes < 0) {
-            ERROR("cannot decode tag and length");
+            LOGERROR("cannot decode tag and length");
             delete obj;
             return -1;
         }
@@ -876,7 +865,7 @@ int der_decode_x509_general_names(const OctetString &der_bytes, Value **out)
             obj->insert("registeredID", new String(hexlify(field)));
             break;
         default:
-            ERROR("invalid tag 0x%x", tag);
+            LOGERROR("invalid tag 0x%x", tag);
             delete obj;
             return -1;
         }
@@ -920,11 +909,11 @@ int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, Value
     OctetString value;
     int n_bytes = get_tag_length_value(der_bytes, tag, length, value);
     if (n_bytes < 0) {
-        ERROR("cannot decode tag and length");
+        LOGERROR("cannot decode tag and length");
         return -1;
     }
     if (tag != V_ASN1_SEQUENCE) {
-        ERROR("not a sequence. tag=0x%X", tag);
+        LOGERROR("not a sequence. tag=0x%X", tag);
         return -1;
     }
     Object *obj = NULL;
@@ -940,7 +929,7 @@ int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, Value
             OctetString field;
             int n_bytes = get_tag_length_value(value, tag, length, field);
             if (n_bytes < 0) {
-                ERROR("cannot decode tag and length (2)");
+                LOGERROR("cannot decode tag and length (2)");
                 return -1;
             }
             //printf("debug: der_decode_x509_authority_key_identifier: tag=%d\n", tag);
@@ -957,7 +946,7 @@ int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, Value
                     goto error;
                 }
             } else {
-                ERROR("invalid tag %d", tag);
+                LOGERROR("invalid tag %d", tag);
                 return -1;
             }
             // Remove the consumed bytes
@@ -1005,7 +994,7 @@ static int der_decode_x509_authority_key_identifier(const OctetString &der_bytes
     OctetString sequence;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequence);
     if (n_bytes_total < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
@@ -1015,7 +1004,7 @@ static int der_decode_x509_authority_key_identifier(const OctetString &der_bytes
         OctetString field;
         int n_bytes_field = get_tag_length_value(sequence, tag, length, field);
         if (n_bytes_field <= 0) {
-            ERROR("cannot decode tag and length");
+            LOGERROR("cannot decode tag and length");
             return -1;
         }
         if (0 == tag) {
@@ -1026,14 +1015,13 @@ static int der_decode_x509_authority_key_identifier(const OctetString &der_bytes
             // rebuild a full ASN1 DER INTEGER with universal tag and length
             OctetString der_integer = field;
             der_integer[0] = 0x2; // set a universal tag for INTEGER
-            size_t i=0;
             int n_bytes_integer = der_decode_integer(der_integer, akid.authority_cert_serial_number);
             if (n_bytes_integer < 0) {
-                ERROR("cannot decode integer");
+                LOGERROR("cannot decode integer");
                 return -1;
             }
         } else {
-            ERROR("invalid tag %d", tag);
+            LOGERROR("invalid tag %d", tag);
             return -1;
         }
         // Remove the consumed bytes
@@ -1053,11 +1041,11 @@ int der_decode_x509_key_usage(const OctetString &der_bytes, size_t &i_start, siz
     // Get ASN1 tag (without class) and size of the object
     int ret = ASN1_get_object(&ptr, &len, &tag, &xclass, i_end - i_start);
     if (ret & 0x80) {
-        ERROR("cannot decode tag and length");
+        LOGERROR("cannot decode tag and length");
         return -1;
     }
     if (tag != V_ASN1_BIT_STRING) {
-        ERROR("not a BIT STRING. tag=0x%X, class=0x%X", tag, xclass);
+        LOGERROR("not a BIT STRING. tag=0x%X, class=0x%X", tag, xclass);
         return -1;
     }
 
@@ -1080,17 +1068,17 @@ int der_decode_x509_key_usage(const OctetString &der_bytes, size_t &i_start, siz
  */
 static int der_decode_x509_key_usage(const OctetString &der_bytes, KeyUsage &key_usage)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
 
     std::vector<bool> bits;
     int n_bytes = der_decode_bit_string(der_bytes, bits);
     if (n_bytes < 0) {
-        ERROR("Cannot decode bit string");
+        LOGERROR("Cannot decode bit string");
         return -1;
     }
 
     if (bits.size() > 9) {
-        ERROR("Bit string too long: %lu", bits.size());
+        LOGERROR("Bit string too long: %lu", bits.size());
         return -1;
     }
 
@@ -1123,24 +1111,24 @@ static int der_decode_x509_key_usage(const OctetString &der_bytes, KeyUsage &key
  */
 static int der_decode_x509_extension(const OctetString &der_bytes, Extension &extension)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
 
     OctetString sequence;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequence);
     if (n_bytes_total < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
     int n_bytes = der_decode_object_identifier(sequence, extension.extn_id);
     if (n_bytes < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
     sequence.erase(0, n_bytes);
 
     if (sequence.empty()) {
-        ERROR("Missing field after extn_id");
+        LOGERROR("Missing field after extn_id");
         return -1;
     }
 
@@ -1148,7 +1136,7 @@ static int der_decode_x509_extension(const OctetString &der_bytes, Extension &ex
         // This is 'critical'
         n_bytes = der_decode_boolean(sequence, extension.critical);
         if (n_bytes < 0) {
-            ERROR("Cannot decode boolean");
+            LOGERROR("Cannot decode boolean");
             return -1;
         }
         sequence.erase(0, n_bytes);
@@ -1160,7 +1148,7 @@ static int der_decode_x509_extension(const OctetString &der_bytes, Extension &ex
     OctetString extn_value;
     n_bytes = der_decode_octet_string(sequence, extn_value);
     if (n_bytes < 0) {
-        ERROR("Cannot decode extnValue octet string");
+        LOGERROR("Cannot decode extnValue octet string");
         return -1;
     }
 
@@ -1170,7 +1158,7 @@ static int der_decode_x509_extension(const OctetString &der_bytes, Extension &ex
         OctetString data;
         int n_bytes = der_decode_octet_string(extn_value, data);
         if (n_bytes < 0) {
-            ERROR("Cannot decode id-ce-subjectKeyIdentifier");
+            LOGERROR("Cannot decode id-ce-subjectKeyIdentifier");
             return -1;
         }
         extension.extn_value.emplace<SubjectKeyIdentifier>(data);
@@ -1178,7 +1166,7 @@ static int der_decode_x509_extension(const OctetString &der_bytes, Extension &ex
         KeyUsage key_usage;
         int n_bytes = der_decode_x509_key_usage(extn_value, key_usage);
         if (n_bytes < 0) {
-            ERROR("Cannot decode id-ce-keyUsage");
+            LOGERROR("Cannot decode id-ce-keyUsage");
             return -1;
         }
         extension.extn_value = key_usage;
@@ -1196,7 +1184,7 @@ static int der_decode_x509_extension(const OctetString &der_bytes, Extension &ex
         BasicConstraints basic_constraints;
         int n_bytes = der_decode_x509_basic_constraints(extn_value, basic_constraints);
         if (n_bytes < 0) {
-            ERROR("Cannot decode id-ce-basicConstraints");
+            LOGERROR("Cannot decode id-ce-basicConstraints");
             return -1;
         }
         extension.extn_value = basic_constraints;
@@ -1212,7 +1200,7 @@ static int der_decode_x509_extension(const OctetString &der_bytes, Extension &ex
         std::string time;
         int n_bytes = der_decode_generalized_time(extn_value, time);
         if (n_bytes < 0) {
-            ERROR("Cannot decode id-ce-invalidityDate");
+            LOGERROR("Cannot decode id-ce-invalidityDate");
             return -1;
         }
         extension.extn_value = time;
@@ -1238,7 +1226,7 @@ static int der_decode_x509_extension(const OctetString &der_bytes, Extension &ex
         AuthorityKeyIdentifier akid;
         int n_bytes = der_decode_x509_authority_key_identifier(extn_value, akid);
         if (n_bytes < 0) {
-            ERROR("Cannot decode id-ce-authorityKeyIdentifier");
+            LOGERROR("Cannot decode id-ce-authorityKeyIdentifier");
             return -1;
         }
         extension.extn_value = akid;
@@ -1258,13 +1246,13 @@ static int der_decode_x509_extension(const OctetString &der_bytes, Extension &ex
  */
 int der_decode_x509_extensions(const OctetString &der_bytes, Extensions &extensions)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
 
     // decode SEQUENCE OF header
     OctetString sequenceof;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequenceof);
     if (n_bytes_total < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
@@ -1273,7 +1261,7 @@ int der_decode_x509_extensions(const OctetString &der_bytes, Extensions &extensi
         Extension extension;
         int n_bytes = der_decode_x509_extension(sequenceof, extension);
         if (n_bytes < 0) {
-            ERROR("Cannot decode extension");
+            LOGERROR("Cannot decode extension");
             return -1;
         }
         extensions.items[extension.extn_id] = extension;
@@ -1306,11 +1294,11 @@ int der_decode_x509_extensions(const OctetString &der_bytes, Extensions &extensi
  */
 static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCertificate &tbs_certificate)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
     OctetString value;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, value);
     if (n_bytes_total < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
@@ -1318,13 +1306,13 @@ static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCert
     OctetString version;
     int n_bytes = der_decode_header(value, 0, version);
     if (n_bytes < 0) {
-        ERROR("Cannot decode version explicit tag");
+        LOGERROR("Cannot decode version explicit tag");
         return -1;
     }
 
     int n_bytes_version = der_decode_integer(version, tbs_certificate.version);
     if (n_bytes_version < 0) {
-        ERROR("cannot decode version");
+        LOGERROR("cannot decode version");
         return -1;
     }
 
@@ -1332,42 +1320,42 @@ static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCert
 
     n_bytes = der_decode_integer(value, tbs_certificate.serial_number);
     if (n_bytes < 0) {
-        ERROR("Cannot decode serial number");
+        LOGERROR("Cannot decode serial number");
         return -1;
     }
     value.erase(0, n_bytes);
 
     n_bytes = der_decode_x509_algorithm_identifier(value, tbs_certificate.signature);
     if (n_bytes < 0) {
-        ERROR("Cannot decode signature");
+        LOGERROR("Cannot decode signature");
         return -1;
     }
     value.erase(0, n_bytes);
 
     n_bytes = der_decode_x509_name(value, tbs_certificate.issuer);
     if (n_bytes < 0) {
-        ERROR("Cannot decode issuer");
+        LOGERROR("Cannot decode issuer");
         return -1;
     }
     value.erase(0, n_bytes);
 
     n_bytes = der_decode_x509_validity(value, tbs_certificate.validity);
     if (n_bytes < 0) {
-        ERROR("Cannot decode validity");
+        LOGERROR("Cannot decode validity");
         return -1;
     }
     value.erase(0, n_bytes);
 
     n_bytes = der_decode_x509_name(value, tbs_certificate.subject);
     if (n_bytes < 0) {
-        ERROR("Cannot decode subject");
+        LOGERROR("Cannot decode subject");
         return -1;
     }
     value.erase(0, n_bytes);
 
     n_bytes = der_decode_x509_subject_public_key_info(value, tbs_certificate.subject_public_key_info);
     if (n_bytes < 0) {
-        ERROR("Cannot decode subject_public_key_info");
+        LOGERROR("Cannot decode subject_public_key_info");
         return -1;
     }
     value.erase(0, n_bytes);
@@ -1381,38 +1369,38 @@ static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCert
         OctetString data;
         n_bytes = get_tag_length_value(value, tag, length, data);
         if (n_bytes <= 0) {
-            ERROR("cannot decode tag and length");
+            LOGERROR("cannot decode tag and length");
             return -1;
         }
 
         value = data;
-        DEBUG_DUMP("", value, 16);
+        LOGHEX("", value, 16);
 
         OctetString optional;
         switch (tag) {
         case 1: // issuerUniqueID
             n_bytes = der_decode_bit_string(value, tbs_certificate.issuer_unique_id);
             if (n_bytes < 0) {
-                ERROR("cannot decode issuer unique id");
+                LOGERROR("cannot decode issuer unique id");
                 return -1;
             }
             break;
         case 2: // subjectUniqueID
             n_bytes = der_decode_bit_string(value, tbs_certificate.subject_unique_id);
             if (n_bytes < 0) {
-                ERROR("cannot decode subject unique id");
+                LOGERROR("cannot decode subject unique id");
                 return -1;
             }
             break;
         case 3: // extensions
             n_bytes = der_decode_x509_extensions(value, tbs_certificate.extensions);
             if (n_bytes < 0) {
-                ERROR("cannot decode extensions");
+                LOGERROR("cannot decode extensions");
                 return -1;
             }
             break;
         default:
-            ERROR("cannot decode optional fields: tag=0x%x", tag);
+            LOGERROR("cannot decode optional fields: tag=0x%x", tag);
             return -1;
         }
         value.erase(0, n_bytes);
@@ -1437,17 +1425,17 @@ static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCert
  */
 int der_decode_x509_certificate(const OctetString &der_bytes, Certificate &cert)
 {
-    DEBUG_DUMP("", der_bytes, 16);
+    LOGHEX("", der_bytes, 16);
     OctetString value;
     int n_bytes = der_decode_header(der_bytes, V_ASN1_SEQUENCE, value);
     if (n_bytes < 0) {
-        ERROR("Cannot decode header");
+        LOGERROR("Cannot decode header");
         return -1;
     }
 
     n_bytes = der_decode_x509_tbs_certificate(value, cert.tbs_certificate);
     if (n_bytes < 0) {
-        ERROR("cannot decode tbs_certificate");
+        LOGERROR("cannot decode tbs_certificate");
         return -1;
     }
 
@@ -1455,7 +1443,7 @@ int der_decode_x509_certificate(const OctetString &der_bytes, Certificate &cert)
 
     n_bytes = der_decode_x509_algorithm_identifier(value, cert.signature_algorithm);
     if (n_bytes < 0) {
-        ERROR("cannot decode signature_algorithm");
+        LOGERROR("cannot decode signature_algorithm");
         return -1;
     }
 
@@ -1463,14 +1451,14 @@ int der_decode_x509_certificate(const OctetString &der_bytes, Certificate &cert)
 
     n_bytes = der_decode_bit_string(value, cert.signature_value);
     if (n_bytes < 0) {
-        ERROR("cannot decode signature_value");
+        LOGERROR("cannot decode signature_value");
         return -1;
     }
 
     value.erase(0, n_bytes); // remove consumed bytes
 
     if (!value.empty()) {
-        ERROR("warning: trailing garbage bytes not decoded (too many bytes)");
+        LOGERROR("warning: trailing garbage bytes not decoded (too many bytes)");
     }
 
     return 0;

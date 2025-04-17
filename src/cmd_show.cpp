@@ -12,6 +12,7 @@
 #include "cli.h"
 #include "cmd_show.h"
 #include "der_decode_x509.h"
+#include "journal.h"
 #include "oid_name.h"
 #include "render_text.h"
 
@@ -19,10 +20,16 @@
 static error_t parse_opt(int key, char* arg, struct argp_state* state)
 {
     struct arguments *arguments = (struct arguments *)state->input;
+    int level;
 
     switch(key) {
     case 'h':
         argp_state_help(state, state->out_stream, ARGP_HELP_STD_HELP);
+        break;
+    case 'v':
+        level = journal.get_log_level();
+        level++;
+        journal.set_log_level(level);
         break;
     case ARGP_KEY_ARG:
         assert(arg);
@@ -51,6 +58,7 @@ static struct argp_option options[] = {
     { "format",      'f', "FORMAT", 0, "text|json (default: text)", 1 },
     { "style",         0, "STYLE",  0, "tree|list (default: tree)", 1 },
     { "properties",  'p', "PROP[,PROP]...",  0, "Properties to show", 1 },
+    { "verbose",     'v', 0,                 0, "Be verbose (repeat for more verbosity)", 1 },
     { "",  0, 0,  OPTION_DOC, 0, 1 },
     { 0,  'h', 0, 0, 0, -1 },
     { 0 }

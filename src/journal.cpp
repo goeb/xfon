@@ -2,7 +2,14 @@
 
 #include "journal.h"
 
-void Journal::log(int level, const char *format, ...)
+Journal journal;
+
+Journal::Journal()
+{
+    max_level = LOG_WARNING;
+}
+
+void Journal::log(int level, const char *file, const char *func, const char *format, ...)
 {
     va_list ap;
 
@@ -26,5 +33,22 @@ void Journal::log(int level, const char *format, ...)
         return; // cannot log
     }
     lines.push_back(std::make_pair(level, std::string(ptr)));
+
+    if (level <= max_level) {
+        if (level == LOG_DEBUG) fprintf(stderr, "%s: %s: ", file, func);
+        fprintf(stderr, "%s", ptr);
+        fprintf(stderr, "\n");
+    }
     free(ptr);
 }
+
+void Journal::set_log_level(Level level)
+{
+    max_level = level;
+}
+
+int Journal::get_log_level()
+{
+    return max_level;
+}
+
