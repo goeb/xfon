@@ -94,6 +94,7 @@ public:
     TBSCertificate tbs_certificate;
     AlgorithmIdentifier signature_algorithm;
     OctetString signature_value;
+    OctetString der_bytes; // Full der encoded value, containing the 3 fields above
     std::string filename;
     size_t index_in_file;
     void *opaque; // conveys data in a format specific to the back-end crypto lib

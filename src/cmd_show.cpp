@@ -168,11 +168,10 @@ OctetString get_der_sequence(std::istream &input)
     return der_bytes;
 }
 
-static int show_cert_file(std::istream &input, const char *filename)
+static int load_cert_file(std::istream &input, const char *filename, std::vector<Certificate> &certificates)
 {
     LOGDEBUG("%s", filename);
     size_t index = 0;
-    std::list<Certificate> certificates;
     while (1) {
         int c = input.peek();
         if (c == EOF) {
@@ -205,11 +204,37 @@ static int show_cert_file(std::istream &input, const char *filename)
     }
 
     if (certificates.empty()) {
-        LOGERROR("No certificate read from '%s'", filename);
-        return -1;
+        LOGWARNING("No certificate read from '%s'", filename);
     }
 
-    std::list<Certificate_with_links> certs = compute_hierarchy(certificates);
+    return 0;
+}
+
+int cmd_show(const std::list<std::string> &certificates_paths)
+{
+    int err = 0;
+    std::vector<Certificate> certificates;
+
+    if (certificates_paths.size() == 0) {
+        // Take certificates from stdin
+        err = load_cert_file(std::cin, "(stdin)", certificates);
+
+    } else {
+        for (auto cert_path : certificates_paths) {
+            std::ifstream ifs(cert_path, std::ifstream::in);
+            if (!ifs.good()) {
+                LOGERROR("Cannot read from '%s': %s", cert_path.c_str(), strerror(errno));
+                err = 1;
+                break;
+            } else {
+                err = load_cert_file(ifs, cert_path.c_str(), certificates);
+                if (err) break;
+                ifs.close();
+            }
+        }
+    }
+
+    std::vector<Certificate_with_links> certs = compute_hierarchy(certificates);
 
     for (auto const &cert: certs) {
         IndentationContext indent_ctx;
@@ -221,30 +246,6 @@ static int show_cert_file(std::istream &input, const char *filename)
         printf("%s", to_string(cert, indent_ctx).c_str());
     }
 
-    return 0;
-}
-
-int cmd_show(const std::list<std::string> &certificates_paths)
-{
-    int err = 0;
-    if (certificates_paths.size() == 0) {
-        // Take certificates from stdin
-        err = show_cert_file(std::cin, "(stdin)");
-
-    } else {
-        for (auto cert_path : certificates_paths) {
-            std::ifstream ifs(cert_path, std::ifstream::in);
-            if (!ifs.good()) {
-                LOGERROR("Cannot read from '%s': %s", cert_path.c_str(), strerror(errno));
-                err = 1;
-                break;
-            } else {
-                err = show_cert_file(ifs, cert_path.c_str());
-                if (err) break;
-                ifs.close();
-            }
-        }
-    }
     if (err) return 1;
     return 0;
 }

@@ -1423,6 +1423,8 @@ static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCert
 int der_decode_x509_certificate(const OctetString &der_bytes, Certificate &cert)
 {
     LOGHEX("", der_bytes, 16);
+    cert.der_bytes = der_bytes;
+
     OctetString value;
     int n_bytes = der_decode_header(der_bytes, V_ASN1_SEQUENCE, value);
     if (n_bytes < 0) {

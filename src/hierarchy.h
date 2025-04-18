@@ -1,6 +1,8 @@
 #ifndef HIERARCHY_H
 #define HIERARCHY_H
 
+#include <vector>
+
 #include "certificate.h"
 
 struct Certificate_with_links : public Certificate {
@@ -9,9 +11,6 @@ struct Certificate_with_links : public Certificate {
     Certificate_with_links(const Certificate &cert):  Certificate(cert) {}
 };
 
-bool is_self_signed(const Certificate &cert);
-bool is_issuer(const Certificate &cert_issuer, const Certificate &cert_child);
-
-std::list<Certificate_with_links> compute_hierarchy(const std::list<Certificate> &certificates);
+std::vector<Certificate_with_links> compute_hierarchy(const std::vector<Certificate> &certificates);
 
 #endif
