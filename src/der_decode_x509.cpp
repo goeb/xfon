@@ -979,7 +979,6 @@ error:
  * 308187 8014 BF5FB7D1CEDD1F86F45B55ACDCD710C20EA988E7
  *        A16C A46A 3068 310B3009060355040613025553 3125 3023060355040A131C537461726669656C6420546563686E6F6C6F676965732C20496E632E31323030060355040B1329537461726669656C6420436C61737320322043657274696669636174696F6E20417574686F72697479
  *        8201 00
- *
  */
 static int der_decode_x509_authority_key_identifier(const OctetString &der_bytes, AuthorityKeyIdentifier &akid)
 {
@@ -1010,7 +1009,7 @@ static int der_decode_x509_authority_key_identifier(const OctetString &der_bytes
             der_decode_x509_general_names(field, akid.authority_cert_issuer);
         } else if (2 == tag) {
             // rebuild a full ASN1 DER INTEGER with universal tag and length
-            OctetString der_integer = field;
+            OctetString der_integer = sequence;
             der_integer[0] = 0x2; // set a universal tag for INTEGER
             int n_bytes_integer = der_decode_integer(der_integer, akid.authority_cert_serial_number);
             if (n_bytes_integer < 0) {
@@ -1151,6 +1150,7 @@ static int der_decode_x509_extension(const OctetString &der_bytes, Extension &ex
 
     // TODO add warnings for fields below that are not fully decoded
     std::string oid_name = oid_get_name(extension.extn_id);
+    LOGDEBUG("oid %s", oid_name.c_str());
     if (oid_name == "id-ce-subjectKeyIdentifier") {
         OctetString data;
         int n_bytes = der_decode_octet_string(extn_value, data);
@@ -1432,7 +1432,7 @@ int der_decode_x509_certificate(const OctetString &der_bytes, Certificate &cert)
 
     n_bytes = der_decode_x509_tbs_certificate(value, cert.tbs_certificate);
     if (n_bytes < 0) {
-        LOGERROR("cannot decode tbs_certificate");
+        LOGERROR("cannot decode tbs_certificate: %s:%lu", cert.filename.c_str(), cert.index_in_file);
         return -1;
     }
 

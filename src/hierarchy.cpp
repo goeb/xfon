@@ -38,3 +38,11 @@ bool is_issuer(const Certificate &cert_issuer, const Certificate &cert_child)
 
     return true;
 }
+
+std::list<Certificate_with_links> compute_hierarchy(const std::list<Certificate> &certificates)
+{
+    std::list<Certificate_with_links> result;
+    for (auto cert: certificates) {
+        result.push_back(Certificate_with_links(cert));
+    }
+}

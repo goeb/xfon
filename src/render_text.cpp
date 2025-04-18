@@ -11,7 +11,7 @@ std::string to_string(const Name &name)
         for (auto attribute: relative_dn) {
             if (!start) result += ", ";
             result += oid_get_name(attribute.type, true);
-            result += "=";
+            result += ":";
             result += attribute.value;
             start = false;
         }

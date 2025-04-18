@@ -12,6 +12,7 @@
 #include "cli.h"
 #include "cmd_show.h"
 #include "der_decode_x509.h"
+#include "hierarchy.h"
 #include "journal.h"
 #include "render_text.h"
 
@@ -208,8 +209,11 @@ static int show_cert_file(std::istream &input, const char *filename)
         return -1;
     }
 
-    for (auto const &cert: certificates) {
+    std::list<Certificate_with_links> certs = compute_hierarchy(certificates);
+
+    for (auto const &cert: certs) {
         IndentationContext indent_ctx;
+        indent_ctx.has_child = false;
         //indent_ctx.has_child = false;
         //indent_ctx.lineage.push_back(false);
         //indent_ctx.lineage.push_back(true);
