@@ -45,4 +45,5 @@ std::list<Certificate_with_links> compute_hierarchy(const std::list<Certificate>
     for (auto cert: certificates) {
         result.push_back(Certificate_with_links(cert));
     }
+    return result;
 }
