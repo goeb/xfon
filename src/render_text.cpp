@@ -1,3 +1,5 @@
+
+#include "journal.h"
 #include "oid_name.h"
 #include "render_text.h"
 
@@ -36,9 +38,41 @@ std::string to_string(const BasicConstraints &basic_constraints)
 std::string to_string(const Certificate &cert, const IndentationContext &indent_ctx)
 {
     std::string result;
-    result += "│ " + to_string(cert.tbs_certificate.subject) + "\n";
-    result += "│ " + cert.tbs_certificate.validity.not_before + " .. " + cert.tbs_certificate.validity.not_after + "\n";
-    result += "└──────────────────────────────────────────────────────────────────────────────\n";
+    size_t indent_level = indent_ctx.lineage.size();
+    LOGDEBUG("indent_level=%lu", indent_level);
+    std::string indent_first_line;
+    std::string indent_second_lines;
+    std::string indent_last_line;
+    if (indent_level) {
+        for (size_t i=0; i<indent_level-1; i++) {
+            indent_first_line += indent_ctx.lineage[i]?"   │":"    ";
+        }
+        indent_second_lines = indent_first_line;
+        indent_last_line = indent_first_line;
+        // do the last step, where first and second lines differ
+        if (indent_ctx.lineage[indent_level-1]) {
+            indent_first_line   += "   ├──┤ ";
+            indent_second_lines += "   │  │ ";
+            indent_last_line    += "   │  └─";
+        } else {
+            indent_first_line   += "   └──┤ ";
+            indent_second_lines += "      │ ";
+            indent_last_line    += "      └─";
+        }
+    } else {
+        // This certificate has no parent
+        indent_first_line   = "│ ";
+        indent_second_lines = "│ ";
+        indent_last_line    = "└─";
+    }
+    result += indent_first_line + to_string(cert.tbs_certificate.subject) + "\n";
+    result += indent_second_lines + cert.tbs_certificate.validity.not_before + " .. " + cert.tbs_certificate.validity.not_after + "\n";
+    if (indent_ctx.has_child) {
+        result += indent_last_line + "─┬───────────────────────────────────────────────────────────────────────────\n";
+    } else {
+        result += indent_last_line + "─────────────────────────────────────────────────────────────────────────────\n";
+    }
+
     // TODO extensions
     for (auto it: cert.tbs_certificate.extensions.items) {
         if (it.first == oid_get_id("id-ce-basicConstraints")) {

@@ -13,7 +13,6 @@
 #include "cmd_show.h"
 #include "der_decode_x509.h"
 #include "journal.h"
-#include "oid_name.h"
 #include "render_text.h"
 
 
@@ -86,7 +85,6 @@ struct argp argp_show = { options, parse_opt, args_doc, doc };
  */
 OctetString get_pem_cert(std::istream &input)
 {
-    //fprintf(stderr, "debug: get_pem_cert\n");
     std::string line;
     std::getline(input, line);
     std::string base64lines, base64lines_tmp;
@@ -101,11 +99,11 @@ OctetString get_pem_cert(std::istream &input)
             else base64lines_tmp += line;
         }
         if (input.fail()) {
-            fprintf(stderr, "get_pem_cert: input error\n");
+            LOGERROR("get_pem_cert: input error");
             return OctetString();
         }
     } else {
-        fprintf(stderr, "get_pem_cert: invalid first line\n");
+        LOGERROR("get_pem_cert: invalid first line");
         return OctetString();
     }
     // convert from base64
@@ -120,7 +118,6 @@ OctetString get_pem_cert(std::istream &input)
  */
 OctetString get_der_sequence(std::istream &input)
 {
-    //fprintf(stderr, "debug: get_der_sequence\n");
     OctetString der_bytes;
 
     // Get the length of the SEQUENCE (DER)
@@ -129,7 +126,7 @@ OctetString get_der_sequence(std::istream &input)
     unsigned char buffer[2];
     input.read((char *)buffer, 2);
     if (!input.good()) {
-        fprintf(stderr, "Cannot get first 2 bytes of DER SEQUENCE: %s\n", strerror(errno));
+        LOGERROR("Cannot get first 2 bytes of DER SEQUENCE: %s", strerror(errno));
         return OctetString();
     }
     der_bytes.append(buffer, 2);
@@ -141,28 +138,26 @@ OctetString get_der_sequence(std::istream &input)
             unsigned char c;
             input.read((char*)&c, 1);
             if (!input.good()) {
-                fprintf(stderr, "Cannot get next byte of DER SEQUENCE: %s\n", strerror(errno));
+                LOGERROR("Cannot get next byte of DER SEQUENCE: %s", strerror(errno));
                 return OctetString();
             }
             if (data_length > (INT_MAX >> 8 )) {
                 // unsigned integer overflow
-                fprintf(stderr, "Length of DER SEQUENCE overflow\n");
+                LOGERROR("Length of DER SEQUENCE overflow");
                 return OctetString();
             }
             der_bytes.append(&c, 1);
             data_length = (data_length << 8) + (unsigned char)c;
         }
-        //fprintf(stderr, "debug: multi-byte length=0x%x\n", data_length);
     } else {
         data_length = (unsigned char)buffer[1];
-        //fprintf(stderr, "debug: single-byte length=0x%x\n", data_length);
     }
 
     // Read the SEQUENCE contents
     unsigned char *contents = (unsigned char*)malloc(data_length);
     input.read((char *)contents, data_length);
     if (!input.good()) {
-        fprintf(stderr, "Cannot get %d bytes of contents DER SEQUENCE: %s\n", data_length, strerror(errno));
+        LOGERROR("Cannot get %d bytes of contents DER SEQUENCE: %s", data_length, strerror(errno));
         free(contents);
         return OctetString();
     }
@@ -182,24 +177,20 @@ static int show_cert_file(std::istream &input, const char *filename)
         if (c == EOF) {
             // Cannot get a character
             if (input.eof()) break;
-            fprintf(stderr, "Cannot get first character of '%s': %s\n", filename, strerror(errno));
+            LOGERROR("Cannot get first character of '%s': %s", filename, strerror(errno));
             return -1;
         }
         OctetString der_bytes;
         if (c == '-') {
             der_bytes = get_pem_cert(input);
-            //fprintf(stderr, "xfhdebug: xfh.der\n");
-            //FILE *f = fopen("xfh.der", "w");
-            //fwrite(der_bytes.data(), der_bytes.size(), 1, f);
-            //fclose(f);
         }
         else if (c == 0x30) der_bytes = get_der_sequence(input);
         else {
-            fprintf(stderr, "Unknown certificate format: %s\n", filename);
+            LOGERROR("Unknown certificate format: %s", filename);
             return -1;
         }
         if (der_bytes.empty()) {
-            fprintf(stderr, "Could not read PEM/DER from '%s'\n", filename);
+            LOGERROR("Could not read PEM/DER from '%s'", filename);
             return -1;
         }
 
@@ -213,12 +204,17 @@ static int show_cert_file(std::istream &input, const char *filename)
     }
 
     if (certificates.empty()) {
-        fprintf(stderr, "No certificate read from '%s'\n", filename);
+        LOGERROR("No certificate read from '%s'", filename);
         return -1;
     }
 
     for (auto const &cert: certificates) {
-        printf("%s", to_string(cert).c_str());
+        IndentationContext indent_ctx;
+        //indent_ctx.has_child = false;
+        //indent_ctx.lineage.push_back(false);
+        //indent_ctx.lineage.push_back(true);
+        //indent_ctx.lineage.push_back(false);
+        printf("%s", to_string(cert, indent_ctx).c_str());
     }
 
     return 0;
@@ -235,7 +231,7 @@ int cmd_show(const std::list<std::string> &certificates_paths)
         for (auto cert_path : certificates_paths) {
             std::ifstream ifs(cert_path, std::ifstream::in);
             if (!ifs.good()) {
-                fprintf(stderr, "Cannot read from '%s': %s\n", cert_path.c_str(), strerror(errno));
+                LOGERROR("Cannot read from '%s': %s", cert_path.c_str(), strerror(errno));
                 err = 1;
                 break;
             } else {

@@ -8,7 +8,6 @@
 
 struct IndentationContext {
     std::vector<bool> lineage; // indicates the indentation level and lines that must be drawn before
-    bool is_last_sibling;
     bool has_child;
 };
 
