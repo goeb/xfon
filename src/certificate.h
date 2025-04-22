@@ -17,7 +17,6 @@ typedef std::string IA5String;
 typedef OctetString AnotherName;
 typedef OctetString KeyIdentifier;
 typedef Integer CertificateSerialNumber;
-typedef OctetString GeneralNames;
 
 struct AttributeTypeAndValue {
     ObjectIdentifier type;
@@ -27,6 +26,17 @@ struct AttributeTypeAndValue {
 };
 
 typedef std::list<std::set<AttributeTypeAndValue>> Name;
+
+struct GeneralNames {
+    enum {
+        TYPE_STR,
+        TYPE_NAME,
+        TYPE_OTHER
+    } type;
+    std::string stringvalue;
+    Name namevalue;
+    OctetString othervalue;
+};
 
 struct AuthorityKeyIdentifier {
     KeyIdentifier key_identifier; // empty if not present

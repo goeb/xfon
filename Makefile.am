@@ -10,7 +10,6 @@ xeert_SOURCES = \
 			src/cmd_diff.cpp \
 			src/cmd_grep.cpp \
 			src/cmd_show.cpp \
-			src/data_model.cpp \
 			src/der_decode_x509.cpp \
 			src/hierarchy.cpp \
 			src/journal.cpp \

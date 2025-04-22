@@ -4,11 +4,6 @@
 #include "journal.h"
 #include "oid_name.h"
 
-static bool is_self_signed(const Certificate_with_links &cert)
-{
-    return is_issuer(cert, cert);
-}
-
 /**
  * @brief is_issuer
  * @param cert_issuer
@@ -40,6 +35,11 @@ static bool is_issuer(const Certificate_with_links &cert_issuer, const Certifica
     // Verify signature
 
     return true;
+}
+
+static bool is_self_signed(const Certificate_with_links &cert)
+{
+    return is_issuer(cert, cert);
 }
 
 static void prune_duplicates(std::vector<Certificate_with_links> &certificates)
@@ -95,6 +95,7 @@ std::vector<Certificate_with_links> compute_hierarchy(const std::vector<Certific
                 cert2->children.push_back(&*cert1);
                 cert1->parents.push_back(&*cert2);
             }
+        }
     }
 
     // Break circular loops
