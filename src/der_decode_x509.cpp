@@ -1112,7 +1112,7 @@ int der_decode_x509_certificate(const OctetString &der_bytes, Certificate &cert)
 
     n_bytes = der_decode_x509_tbs_certificate(value, cert.tbs_certificate);
     if (n_bytes < 0) {
-        LOGERROR("cannot decode tbs_certificate: %s:%lu", cert.filename.c_str(), cert.index_in_file);
+        LOGERROR("cannot decode tbs_certificate");
         return -1;
     }
 
@@ -1140,4 +1140,3 @@ int der_decode_x509_certificate(const OctetString &der_bytes, Certificate &cert)
 
     return 0;
 }
-

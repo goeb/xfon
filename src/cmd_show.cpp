@@ -168,7 +168,7 @@ OctetString get_der_sequence(std::istream &input)
     return der_bytes;
 }
 
-static int load_cert_file(std::istream &input, const char *filename, std::vector<Certificate> &certificates)
+static int load_cert_file(std::istream &input, const char *filename, std::vector<Certificate_with_links> &certificates)
 {
     LOGDEBUG("%s", filename);
     size_t index = 0;
@@ -195,11 +195,16 @@ static int load_cert_file(std::istream &input, const char *filename, std::vector
         }
 
         Certificate cert;
-        cert.filename = filename;
-        cert.index_in_file = index;
         int err = der_decode_x509_certificate(der_bytes, cert);
-        if (err) return -1;
-        certificates.push_back(cert);
+
+        if (err) {
+            LOGERROR("Cannot decode certificate: %s:%lu", filename, index);
+            return -1;
+        }
+        Certificate_with_links certificate(cert);
+        certificate.filename = filename;
+        certificate.index_in_file = index;
+        certificates.push_back(certificate);
         index++;
     }
 
@@ -213,7 +218,7 @@ static int load_cert_file(std::istream &input, const char *filename, std::vector
 int cmd_show(const std::list<std::string> &certificates_paths)
 {
     int err = 0;
-    std::vector<Certificate> certificates;
+    std::vector<Certificate_with_links> certificates;
 
     if (certificates_paths.size() == 0) {
         // Take certificates from stdin
@@ -234,9 +239,11 @@ int cmd_show(const std::list<std::string> &certificates_paths)
         }
     }
 
-    std::vector<Certificate_with_links> certs = compute_hierarchy(certificates);
+    if (err) return 1;
 
-    for (auto const &cert: certs) {
+    compute_hierarchy(certificates);
+
+    for (auto const &cert: certificates) {
         IndentationContext indent_ctx;
         indent_ctx.has_child = false;
         //indent_ctx.has_child = false;

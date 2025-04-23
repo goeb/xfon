@@ -6,11 +6,13 @@
 #include "certificate.h"
 
 struct Certificate_with_links : public Certificate {
+    std::string filename;
+    size_t index_in_file;
     std::list<Certificate_with_links*> parents;
     std::list<Certificate_with_links*> children;
     Certificate_with_links(const Certificate &cert):  Certificate(cert) {}
 };
 
-std::vector<Certificate_with_links> compute_hierarchy(const std::vector<Certificate> &certificates);
+void compute_hierarchy(std::vector<Certificate_with_links> &certificates);
 
 #endif
