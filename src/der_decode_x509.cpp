@@ -1,8 +1,6 @@
 #include <assert.h>
 #include <climits>
 #include <openssl/asn1.h>
-#include <openssl/types.h>
-#include <openssl/x509.h>
 #include <string>
 #include <sstream>
 #include <vector>
@@ -21,7 +19,7 @@
  * @param[out] value
  * @return number of bytes read, or -1 on error
  */
-static int get_tag_length_value(const OctetString &der_bytes, int &tag, size_t &length, OctetString &value)
+static int xx_get_tag_length_value(const OctetString &der_bytes, int &tag, size_t &length, OctetString &value)
 {
     LOGHEX("", der_bytes, 16);
     long len_value;
@@ -36,6 +34,63 @@ static int get_tag_length_value(const OctetString &der_bytes, int &tag, size_t &
     length = len_value;
     value = OctetString(der_bytes.data() + len_header, length);
     return len_header + value.size();
+}
+
+/**
+ * @brief Get DER tag, length and value
+ * @param[in] der_bytes
+ * @param[out] tag
+ * @param[out] length // TODO unused?
+ * @param[out] value
+ * @return number of bytes read, or -1 on error
+ */
+static int get_tag_length_value(const OctetString &der_bytes, int &tag, size_t &length, OctetString &value)
+{
+    LOGHEX("", der_bytes, 16);
+    if (der_bytes.empty()) {
+        LOGERROR("empty");
+        return -1;
+    }
+    if (der_bytes.size() < 2) {
+        LOGERROR("missing first byte");
+        return -1;
+    }
+
+    tag = der_bytes[0] & 0x1f;
+
+    int size = 0;
+    size_t len_tag_size = 2; // tag and first byte of the length
+    if (der_bytes[1] & 0x80) {
+        // Length encoded on multibytes, big-endian
+        size_t n_bytes = (unsigned char)der_bytes[1] & 0x7f;
+        if (n_bytes+2 > der_bytes.size()) {
+            LOGERROR("too short for extracting the size: n_bytes+2=%lu, der_bytes.size=%lu",
+                     n_bytes+2, der_bytes.size());
+            return -1;
+        }
+        len_tag_size += n_bytes;
+
+        for (size_t i=0; i<n_bytes; i++) {
+            if (size > (INT_MAX >> 8 )) {
+                // unsigned integer overflow
+                LOGERROR("LOGERROR: overflow");
+                return -1;
+            }
+            size = (size << 8) + der_bytes[i+2];
+        }
+    } else {
+        // length encoded on a single byte
+        size = der_bytes[1];
+    }
+
+    if (len_tag_size + size > der_bytes.size()) {
+        LOGERROR("too short for extracting the payload: size of input %lu, size of tag & length %lu, size of payload %d",
+                 der_bytes.size(), len_tag_size, size);
+        return -1;
+    }
+    value = der_bytes.substr(len_tag_size, size);
+    length = value.size(); // TODO unused?
+    return len_tag_size + size;
 }
 
 static int der_decode_header(const OctetString &der_bytes, int expected_tag, OctetString &value)
@@ -55,49 +110,6 @@ static int der_decode_header(const OctetString &der_bytes, int expected_tag, Oct
     }
     value = data;
     return n_bytes;
-}
-
-
-/** TODO not used. To be removed
- * @brief Get the length of an DER-encoded ASN.1 type
- * @param der_data
- * @param der_length
- * @return
- */
-static int der_decode_data_size(OctetString &der_bytes)
-{
-    if (der_bytes.empty()) {
-        LOGERROR("empty");
-        return -1;
-    }
-    if (der_bytes.size() < 2) {
-        LOGERROR("missing first byte");
-        return -1;
-    }
-    int size = 0;
-    if (der_bytes[0] & 0x80) {
-        // Length encoded on multibytes, big-endian
-        size_t n_bytes = (unsigned char)der_bytes[0] & 0x7f;
-        if (n_bytes+1 > der_bytes.size()) {
-            LOGERROR("too short");
-            return -1;
-        }
-
-        for (size_t i=1; i<n_bytes+1; i++) {
-            if (size > (INT_MAX >> 8 )) {
-                // unsigned integer overflow
-                LOGERROR("LOGERROR: overflow");
-                return -1;
-            }
-            size = (size << 8) + der_bytes[i];
-        }
-        der_bytes.erase(0, 1+n_bytes);
-    } else {
-        // length encoded on a single byte
-        size = der_bytes[0];
-        der_bytes.erase(0, 1);
-    }
-    return size;
 }
 
 /**
@@ -602,6 +614,7 @@ static int der_decode_x509_basic_constraints(const OctetString &der_bytes, Basic
  */
 static int der_decode_x509_general_names(const OctetString &der_bytes, GeneralNames &names)
 {
+    LOGHEX("", der_bytes, 16);
     OctetString sequenceof;
     int n_bytes_total = der_decode_header(der_bytes, V_ASN1_SEQUENCE, sequenceof);
     if (n_bytes_total < 0) {
@@ -686,6 +699,7 @@ static int der_decode_x509_authority_key_identifier(const OctetString &der_bytes
     }
 
     while (sequence.size()) {
+        LOGHEX("", sequence, 32);
         size_t length;
         int tag;
         OctetString field;
@@ -697,7 +711,10 @@ static int der_decode_x509_authority_key_identifier(const OctetString &der_bytes
         if (0 == tag) {
             akid.key_identifier = field;
         } else if (1 == tag) {
-            int n_bytes = der_decode_x509_general_names(field, akid.authority_cert_issuer);
+            // rebuild a full ASN1 DER SEQUENCE OF with universal tag and length
+            OctetString der_sequenceof = sequence;
+            der_sequenceof[0] = 0x10; // set a universal tag for SEQUENCE OF
+            int n_bytes = der_decode_x509_general_names(der_sequenceof, akid.authority_cert_issuer);
             if (n_bytes < 0) {
                 LOGERROR("cannot decode general names");
                 return -1;

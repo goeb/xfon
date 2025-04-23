@@ -95,6 +95,7 @@ std::vector<Certificate_with_links> compute_hierarchy(const std::vector<Certific
                 cert2->children.push_back(&*cert1);
                 cert1->parents.push_back(&*cert2);
             }
+            cert2++;
         }
     }
 
