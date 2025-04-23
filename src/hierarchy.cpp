@@ -68,7 +68,6 @@ static void prune_duplicates(std::vector<Certificate_with_links> &certificates)
  * - Draw parent-child relationships
  * - Break circular loops
  * - Remove multiple parents (eg: same authorities and keys, but different validity dates)
- * - Simplify parallel descendants (eg: a certificate is both a child and a grand-child)
  */
 void compute_hierarchy(std::vector<Certificate_with_links> &certs)
 {
@@ -98,8 +97,5 @@ void compute_hierarchy(std::vector<Certificate_with_links> &certs)
     // - in favor the the longest lineage
 
     // Remove multiple parents (eg: same authorities and keys, but different validity dates)
-    // - in favor the the longest lineage
-
-    // Simplify parallel descendants (eg: a certificate is both a child and a grand-child)
     // - in favor the the longest lineage
 }

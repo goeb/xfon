@@ -177,7 +177,7 @@ static int load_cert_file(std::istream &input, const char *filename, std::vector
         if (c == EOF) {
             // Cannot get a character
             if (input.eof()) break;
-            LOGERROR("Cannot get first character of '%s': %s", filename, strerror(errno));
+            LOGERROR("Cannot get first character: %s:%lu: %s", filename, index, strerror(errno));
             return -1;
         }
         OctetString der_bytes;
@@ -186,11 +186,11 @@ static int load_cert_file(std::istream &input, const char *filename, std::vector
         }
         else if (c == 0x30) der_bytes = get_der_sequence(input);
         else {
-            LOGERROR("Unknown certificate format: %s", filename);
+            LOGERROR("Unknown certificate format: %s:%lu", filename, index);
             return -1;
         }
         if (der_bytes.empty()) {
-            LOGERROR("Could not read PEM/DER from '%s'", filename);
+            LOGERROR("Could not read PEM/DER: %s:%lu", filename, index);
             return -1;
         }
 
@@ -243,15 +243,7 @@ int cmd_show(const std::list<std::string> &certificates_paths)
 
     compute_hierarchy(certificates);
 
-    for (auto const &cert: certificates) {
-        IndentationContext indent_ctx;
-        indent_ctx.has_child = false;
-        //indent_ctx.has_child = false;
-        //indent_ctx.lineage.push_back(false);
-        //indent_ctx.lineage.push_back(true);
-        //indent_ctx.lineage.push_back(false);
-        printf("%s", to_string(cert, indent_ctx).c_str());
-    }
+    print_tree(certificates);
 
     if (err) return 1;
     return 0;
