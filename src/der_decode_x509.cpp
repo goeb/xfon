@@ -1,40 +1,29 @@
 #include <assert.h>
 #include <climits>
-#include <openssl/asn1.h>
 #include <string>
 #include <sstream>
 #include <vector>
-
 #include "certificate.h"
 #include "der_decode_x509.h"
 #include "journal.h"
 #include "oid_name.h"
 #include "util.h"
 
-/**
- * @brief Get DER tag, length and value
- * @param[in] der_bytes
- * @param[out] tag
- * @param[out] length
- * @param[out] value
- * @return number of bytes read, or -1 on error
- */
-static int xx_get_tag_length_value(const OctetString &der_bytes, int &tag, size_t &length, OctetString &value)
-{
-    LOGHEX("", der_bytes, 16);
-    long len_value;
-    int xclass;
-    const unsigned char *ptr = der_bytes.data();
-    // Get ASN1 tag (without class) and size of the object
-    int ret = ASN1_get_object(&ptr, &len_value, &tag, &xclass, der_bytes.size());
-    if (ret & 0x80) return -1;
-    if (len_value < 0) return -1;
-    size_t len_header = ptr - der_bytes.data();
-    if (len_value + len_header > der_bytes.size()) return -1;
-    length = len_value;
-    value = OctetString(der_bytes.data() + len_header, length);
-    return len_header + value.size();
-}
+# define V_ASN1_BOOLEAN                  1
+# define V_ASN1_INTEGER                  2
+# define V_ASN1_BIT_STRING               3
+# define V_ASN1_OCTET_STRING             4
+# define V_ASN1_OBJECT                   6
+# define V_ASN1_UTF8STRING               12
+# define V_ASN1_SEQUENCE                 16
+# define V_ASN1_SET                      17
+# define V_ASN1_NUMERICSTRING            18
+# define V_ASN1_PRINTABLESTRING          19
+# define V_ASN1_T61STRING                20
+# define V_ASN1_IA5STRING                22
+# define V_ASN1_UTCTIME                  23
+# define V_ASN1_GENERALIZEDTIME          24
+# define V_ASN1_VISIBLESTRING            26
 
 /**
  * @brief Get DER tag, length and value
