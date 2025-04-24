@@ -1,0 +1,102 @@
+#!/bin/sh
+#
+# Create ...
+#
+
+create_private_key() {
+    local key="$1"
+    openssl ecparam -out "$key" -name prime256v1 -genkey
+}
+
+create_csr() {
+    local key="$1"
+    local csr="$2"
+    local subject="$3"
+    local tmpconfig=csr.config
+
+    # -------------------------------------------------------------------------
+    cat << EOF > $tmpconfig
+[req]
+req_extensions         = v3_ca
+
+[v3_ca]
+subjectKeyIdentifier = hash
+basicConstraints     = critical, CA:true
+subjectAltName       = DNS:a.b.c
+certificatePolicies  = 1.2.3.4
+EOF
+    # -------------------------------------------------------------------------
+    openssl req -out "$csr" -new -key "$key" \
+            -config $tmpconfig \
+            -batch \
+            -subj "$subject"
+    # rm $tmpconfig
+}
+
+create_selfsigned_cert() {
+    local key="$1"
+    local cert="$2"  # output
+    local subject="$3"
+    local tmpconfig=selfsigned.config
+    # -------------------------------------------------------------------------
+    cat << EOF > $tmpconfig
+[req]
+x509_extensions      = v3_ca
+
+[v3_ca]
+subjectKeyIdentifier = hash
+basicConstraints     = critical, CA:true
+certificatePolicies  = 1.2.3.4
+EOF
+    # -------------------------------------------------------------------------
+    # Validity 20 years
+    openssl req -out "$cert" -x509 -key "$key" \
+            -config $tmpconfig \
+            -batch -days 7300 \
+            -subj "$subject"
+}
+
+issue_certificate() {
+    local ca_cert="$1"
+    local ca_key="$2"
+    local csr="$3"
+    local crt="$4"  # output
+    # validity 20 years
+    openssl req -CA "$ca_cert" -CAkey "$ca_key" -days 7300 -in "$csr" -out "$crt"
+}
+
+CA=ca-root
+create_private_key $CA.key
+create_selfsigned_cert $CA.key $CA.crt "/C=YY/CN=Root YY/"
+
+CA=ca-level1-a
+create_private_key $CA.key
+#create_csr $CA.key $CA.csr "/C=YY/ST=Province Y/L=Locality Y/O=Organization Y/OU=Organization Unit Y/DC=Domain Component Y1/DC=Domain Component Y2/DC=Domain Component Y3/UID=123456+CN=Common Name Y/emailAddress=Y@Y.com/"
+create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+issue_certificate ca-root.crt ca-root.key $CA.csr $CA.crt
+
+CA=ca-level1-b
+create_private_key $CA.key
+create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+issue_certificate ca-root.crt ca-root.key $CA.csr $CA.crt
+
+CA=ca-level2-a
+create_private_key $CA.key
+create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+issue_certificate ca-level1-a.crt ca-level1-a.key $CA.csr $CA.crt
+
+CA=ca-level2-b
+create_private_key $CA.key
+create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+issue_certificate ca-level1-a.crt ca-level1-a.key $CA.csr $CA.crt
+
+CA=ca-level2-c
+create_private_key $CA.key
+create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+issue_certificate ca-level1-b.crt ca-level1-b.key $CA.csr $CA.crt
+
+CA=ca-level3-a
+create_private_key $CA.key
+create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+issue_certificate ca-level2-b.crt ca-level2-b.key $CA.csr $CA.crt
+
