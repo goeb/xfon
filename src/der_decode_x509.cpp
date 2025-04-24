@@ -261,7 +261,7 @@ int der_decode_object_identifier(const OctetString &der_bytes, ObjectIdentifier 
                 LOGERROR("Integer overflow");
                 return -1;
             }
-            current = current << 3;
+            current = current << 7;
         } else {
             current += value[i];
             result << "." << current;
@@ -269,6 +269,7 @@ int der_decode_object_identifier(const OctetString &der_bytes, ObjectIdentifier 
         }
     }
     oid = result.str();
+    LOGDEBUG("oid=%s", oid.c_str());
     return n_bytes;
 }
 

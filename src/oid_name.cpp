@@ -9,6 +9,9 @@ struct Oid {
 };
 
 static const Oid OID_NAMES[] = {
+    { "0.9.2342.19200300.100.1.1", "userid", "uid"},
+    { "0.9.2342.19200300.100.1.25", "id-domainComponent", "dc" },
+    { "1.2.840.113549.1.9.1", "id-emailAddress", "email" },
     { "2.5.4.3", "id-at-commonName", "cn" },
     { "2.5.4.4", "id-at-surname", "sn" },
     { "2.5.4.5", "id-at-serialNumber", "serial" },
