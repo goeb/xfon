@@ -46,7 +46,7 @@ std::string to_string(const Certificate_with_links &cert, const IndentationConte
     std::string indent_last_line;
     if (indent_level) {
         for (size_t i=0; i<indent_level-1; i++) {
-            indent_first_line += indent_ctx.lineage[i]?"     │":"      ";
+            indent_first_line += indent_ctx.lineage[i]?"   │  ":"      ";
         }
         indent_second_lines = indent_first_line;
         indent_last_line = indent_first_line;
