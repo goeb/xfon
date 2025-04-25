@@ -105,7 +105,6 @@ public:
     AlgorithmIdentifier signature_algorithm;
     OctetString signature_value;
     OctetString der_bytes; // Full der encoded value, containing the 3 fields above
-    void *opaque; // conveys data in a format specific to the back-end crypto lib
 };
 
 #endif

@@ -16,6 +16,7 @@ xeert_SOURCES = \
 			src/oid_name.cpp \
 			src/render_text.cpp \
 			src/util.cpp \
+			src/x509_verify.cpp \
 			src/xeert.cpp
 
 xeert_CPPFLAGS = @OPENSSL_CFLAGS@

@@ -3,6 +3,7 @@
 #include "hierarchy.h"
 #include "journal.h"
 #include "oid_name.h"
+#include "x509_verify.h"
 
 /**
  * @brief is_issuer
@@ -13,7 +14,7 @@
  * Tell if a certificate is a valid issuer of another certificate.
  *
  * - compare issuer/subject properties
- * - compare extensions ...
+ * - compare extensions
  * - verify signature
  */
 static bool is_issuer(const Certificate_with_links &cert_issuer, const Certificate_with_links &cert_child)
@@ -22,17 +23,34 @@ static bool is_issuer(const Certificate_with_links &cert_issuer, const Certifica
         return false;
     }
 
-    return true; // TODO
-
-    // Look at extensions
-    // id-ce-authorityKeyIdentifier
+    // Look if subjectKeyIdentifier and authorityKeyIdentifier match
     auto it = cert_child.tbs_certificate.extensions.items.find(oid_get_id("id-ce-authorityKeyIdentifier"));
     if (it != cert_child.tbs_certificate.extensions.items.end()) {
-        // Extension found
+        // Extension authorityKeyIdentifier found in the child
         AuthorityKeyIdentifier akid = std::any_cast<AuthorityKeyIdentifier>(it->second.extn_value);
+        if (akid.key_identifier.size()) {
+            auto skidit = cert_issuer.tbs_certificate.extensions.items.find(oid_get_id("id-ce-subjectKeyIdentifier"));
+            if (skidit == cert_issuer.tbs_certificate.extensions.items.end()) {
+                // The issuer has no subjectKeyIdentifier
+                LOGERROR("Matching issuer/subject but non-matching authorityKeyIdentifier/subjectKeyIdentifier (1)");
+                return false;
+            }
+            SubjectKeyIdentifier skid = std::any_cast<SubjectKeyIdentifier>(skidit->second.extn_value);
+            if (skid != akid.key_identifier) {
+                // Non-matching authorityKeyIdentifier/subjectKeyIdentifier
+                LOGERROR("Matching issuer/subject but non-matching authorityKeyIdentifier/subjectKeyIdentifier (2)");
+                return false;
+            }
+        }
     }
 
     // Verify signature
+    if (!x509_verify_signature(cert_issuer, cert_child)) {
+        LOGERROR("Claimed issued certificate %s:%lu not verified by authority certificate %s:%lu",
+                 cert_child.filename.c_str(), cert_child.index_in_file,
+                 cert_issuer.filename.c_str(), cert_issuer.index_in_file);
+        return false;
+    }
 
     return true;
 }
@@ -46,8 +64,6 @@ static void prune_duplicates(std::vector<Certificate_with_links> &certificates)
 {
     std::vector<Certificate_with_links>::iterator cert1;
     std::vector<Certificate_with_links>::iterator cert2;
-    LOGDEBUG("certificates.size()=%lu", certificates.size());
-    size_t len = certificates.size();
     for (cert1=certificates.begin(); cert1!=certificates.end(); cert1++) {
         for (cert2=cert1+1; cert2!=certificates.end();) {
             if (cert1->der_bytes == cert2->der_bytes) {

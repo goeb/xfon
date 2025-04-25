@@ -12,32 +12,25 @@ create_csr() {
     local key="$1"
     local csr="$2"
     local subject="$3"
-    local tmpconfig=csr.config
+    local tmpconfig=tmp-csr-config
 
     # -------------------------------------------------------------------------
     cat << EOF > $tmpconfig
-[req]
-req_extensions         = v3_ca
-
-[v3_ca]
-subjectKeyIdentifier = hash
-basicConstraints     = critical, CA:true
-subjectAltName       = DNS:a.b.c
-certificatePolicies  = 1.2.3.4
+# Empty config
 EOF
     # -------------------------------------------------------------------------
     openssl req -out "$csr" -new -key "$key" \
             -config $tmpconfig \
             -batch \
             -subj "$subject"
-    # rm $tmpconfig
+    rm $tmpconfig
 }
 
 create_selfsigned_cert() {
     local key="$1"
     local cert="$2"  # output
     local subject="$3"
-    local tmpconfig=selfsigned.config
+    local tmpconfig=tmp-selfsigned-config
     # -------------------------------------------------------------------------
     cat << EOF > $tmpconfig
 [req]
@@ -50,10 +43,12 @@ certificatePolicies  = 1.2.3.4
 EOF
     # -------------------------------------------------------------------------
     # Validity 20 years
-    openssl req -out "$cert" -x509 -key "$key" \
+    openssl req -out "$cert" -outform der -x509 -key "$key" \
             -config $tmpconfig \
             -batch -days 7300 \
             -subj "$subject"
+
+	rm $tmpconfig
 }
 
 issue_certificate() {
@@ -62,41 +57,83 @@ issue_certificate() {
     local csr="$3"
     local crt="$4"  # output
     # validity 20 years
-    openssl req -CA "$ca_cert" -CAkey "$ca_key" -days 7300 -in "$csr" -out "$crt"
+    openssl req -CA "$ca_cert" -outform der -CAkey "$ca_key" -days 7300 -in "$csr" -out "$crt"
 }
 
-CA=ca-root
-create_private_key $CA.key
-create_selfsigned_cert $CA.key $CA.crt "/C=YY/CN=Root YY/"
+create_nominal_chain_1() {
+    # │ country:YY, cn:Root YY
+    # └──┬────────────────────
+    #    ├──┤ country:YY, cn:ca-level1-a
+    #    │  └──┬────────────────────────
+    #    │     ├──┤ country:YY, cn:ca-level2-a
+    #    │     │  └───────────────────────────
+    #    │     └──┤ country:YY, cn:ca-level2-b
+    #    │        └──┬────────────────────────
+    #    │           └──┤ country:YY, cn:ca-level3-a
+    #    │              └───────────────────────────
+    #    └──┤ country:YY, cn:ca-level1-b
+    #       └──┬────────────────────────
+    #          └──┤ country:YY, cn:ca-level2-c
+    #             └───────────────────────────
+	CA=ca-root
+	create_private_key $CA.key
+	create_selfsigned_cert $CA.key $CA.crt "/C=YY/CN=Root YY/"
+	
+	CA=ca-level1-a
+	create_private_key $CA.key
+	#create_csr $CA.key $CA.csr "/C=YY/ST=Province Y/L=Locality Y/O=Organization Y/OU=Organization Unit Y/DC=Domain Component Y1/DC=Domain Component Y2/DC=Domain Component Y3/UID=123456+CN=Common Name Y/emailAddress=Y@Y.com/"
+	create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+	issue_certificate ca-root.crt ca-root.key $CA.csr $CA.crt
+	
+	CA=ca-level1-b
+	create_private_key $CA.key
+	create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+	issue_certificate ca-root.crt ca-root.key $CA.csr $CA.crt
+	
+	CA=ca-level2-a
+	create_private_key $CA.key
+	create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+	issue_certificate ca-level1-a.crt ca-level1-a.key $CA.csr $CA.crt
+	
+	CA=ca-level2-b
+	create_private_key $CA.key
+	create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+	issue_certificate ca-level1-a.crt ca-level1-a.key $CA.csr $CA.crt
+	
+	CA=ca-level2-c
+	create_private_key $CA.key
+	create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+	issue_certificate ca-level1-b.crt ca-level1-b.key $CA.csr $CA.crt
+	
+	CA=ca-level3-a
+	create_private_key $CA.key
+	create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+	issue_certificate ca-level2-b.crt ca-level2-b.key $CA.csr $CA.crt
+}
 
-CA=ca-level1-a
-create_private_key $CA.key
-#create_csr $CA.key $CA.csr "/C=YY/ST=Province Y/L=Locality Y/O=Organization Y/OU=Organization Unit Y/DC=Domain Component Y1/DC=Domain Component Y2/DC=Domain Component Y3/UID=123456+CN=Common Name Y/emailAddress=Y@Y.com/"
-create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
-issue_certificate ca-root.crt ca-root.key $CA.csr $CA.crt
+create_invalid_chain_1() {
+	# Create two root CA with same subject and different keys
+    # │ country:YY, cn:Root YY
+    # └──┬────────────────────
+    #    └──┤ country:YY, cn:ca-level1-a
+    #       └───────────────────────────
+    # │ country:YY, cn:Root YY
+    # └───────────────────────
+	# 
+	CA=ca-root-1
+	create_private_key $CA.key
+	create_selfsigned_cert $CA.key $CA.crt "/C=YY/CN=Root YY/"
+	CA=ca-root-2
+	create_private_key $CA.key
+	create_selfsigned_cert $CA.key $CA.crt "/C=YY/CN=Root YY/"
 
-CA=ca-level1-b
-create_private_key $CA.key
-create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
-issue_certificate ca-root.crt ca-root.key $CA.csr $CA.crt
+    CA=ca-level1-a
+    create_private_key $CA.key
+    create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
+    issue_certificate ca-root-1.crt ca-root-1.key $CA.csr $CA.crt
 
-CA=ca-level2-a
-create_private_key $CA.key
-create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
-issue_certificate ca-level1-a.crt ca-level1-a.key $CA.csr $CA.crt
+	rm ca-root-1.key ca-root-2.key ca-level1-a.key ca-level1-a.csr
+}
 
-CA=ca-level2-b
-create_private_key $CA.key
-create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
-issue_certificate ca-level1-a.crt ca-level1-a.key $CA.csr $CA.crt
-
-CA=ca-level2-c
-create_private_key $CA.key
-create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
-issue_certificate ca-level1-b.crt ca-level1-b.key $CA.csr $CA.crt
-
-CA=ca-level3-a
-create_private_key $CA.key
-create_csr $CA.key $CA.csr "/C=YY/CN=$CA/"
-issue_certificate ca-level2-b.crt ca-level2-b.key $CA.csr $CA.crt
-
+#create_invalid_chain_1
+create_nominal_chain_1
