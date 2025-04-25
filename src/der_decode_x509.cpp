@@ -26,14 +26,13 @@
 # define V_ASN1_VISIBLESTRING            26
 
 /**
- * @brief Get DER tag, length and value
+ * @brief Get DER tag and value
  * @param[in] der_bytes
  * @param[out] tag
- * @param[out] length // TODO unused?
  * @param[out] value
  * @return number of bytes read, or -1 on error
  */
-static int get_tag_length_value(const OctetString &der_bytes, int &tag, size_t &length, OctetString &value)
+static int get_tag_length_value(const OctetString &der_bytes, int &tag, OctetString &value)
 {
     LOGHEX("", der_bytes, 16);
     if (der_bytes.empty()) {
@@ -78,17 +77,15 @@ static int get_tag_length_value(const OctetString &der_bytes, int &tag, size_t &
         return -1;
     }
     value = der_bytes.substr(len_tag_size, size);
-    length = value.size(); // TODO unused?
     return len_tag_size + size;
 }
 
 static int der_decode_header(const OctetString &der_bytes, int expected_tag, OctetString &value)
 {
     LOGHEX("", der_bytes, 16);
-    size_t length;
     int tag;
     OctetString data;
-    int n_bytes = get_tag_length_value(der_bytes, tag, length, data);
+    int n_bytes = get_tag_length_value(der_bytes, tag, data);
     if (n_bytes <= 0) {
         LOGERROR("cannot decode tag and length");
         return -1;
@@ -112,10 +109,9 @@ static int der_decode_header(const OctetString &der_bytes, int expected_tag, Oct
 static int der_decode_integer(const OctetString &der_bytes, Integer &value)
 {
     LOGHEX("", der_bytes, 16);
-    size_t length;
     int tag;
     OctetString data;
-    int n_bytes = get_tag_length_value(der_bytes, tag, length, data);
+    int n_bytes = get_tag_length_value(der_bytes, tag, data);
     if (n_bytes < 0) {
         LOGERROR("cannot decode tag and length");
         return -1;
@@ -336,10 +332,9 @@ static int der_decode_x509_attribute_value(const OctetString &der_bytes, Attribu
     sequence.erase(0, n_bytes);
 
     // The value can be of different types: PrintableString, UTF8String, etc.
-    size_t length;
     int tag;
     OctetString value;
-    n_bytes = get_tag_length_value(sequence, tag, length, value);
+    n_bytes = get_tag_length_value(sequence, tag, value);
     if (n_bytes <= 0) {
         LOGERROR("cannot decode tag and length");
         return -1;
@@ -467,10 +462,9 @@ static int der_decode_x509_time(const OctetString &der_bytes, std::string &time)
 {
     LOGHEX("", der_bytes, 64);
 
-    size_t length;
     int tag;
     OctetString value;
-    int n_bytes = get_tag_length_value(der_bytes, tag, length, value);
+    int n_bytes = get_tag_length_value(der_bytes, tag, value);
     if (n_bytes < 0) {
         LOGERROR("cannot decode tag and length");
         return -1;
@@ -613,10 +607,9 @@ static int der_decode_x509_general_names(const OctetString &der_bytes, GeneralNa
     }
 
     while (sequenceof.size()) {
-        size_t length;
         int tag;
         OctetString field;
-        int n_bytes_field = get_tag_length_value(sequenceof, tag, length, field);
+        int n_bytes_field = get_tag_length_value(sequenceof, tag, field);
         if (n_bytes_field <= 0) {
             LOGERROR("cannot decode tag and length");
             return -1;
@@ -690,10 +683,9 @@ static int der_decode_x509_authority_key_identifier(const OctetString &der_bytes
 
     while (sequence.size()) {
         LOGHEX("", sequence, 32);
-        size_t length;
         int tag;
         OctetString field;
-        int n_bytes_field = get_tag_length_value(sequence, tag, length, field);
+        int n_bytes_field = get_tag_length_value(sequence, tag, field);
         if (n_bytes_field <= 0) {
             LOGERROR("cannot decode tag and length");
             return -1;
@@ -1037,13 +1029,10 @@ static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCert
     value.erase(0, n_bytes);
 
     while (!value.empty()) {
-
         // There are remaining bytes. Optional fields are expected.
-
-        size_t length;
         int tag;
         OctetString data;
-        n_bytes = get_tag_length_value(value, tag, length, data);
+        n_bytes = get_tag_length_value(value, tag, data);
         if (n_bytes <= 0) {
             LOGERROR("cannot decode tag and length");
             return -1;
