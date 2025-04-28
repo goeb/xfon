@@ -4,8 +4,8 @@ AM_CFLAGS = -Wall
 AM_CXXFLAGS = -Wall
 AM_LDFLAGS =
 
-bin_PROGRAMS = xeert
-xeert_SOURCES = \
+bin_PROGRAMS = xfon
+xfon_SOURCES = \
 			src/certificate.cpp \
 			src/cmd_diff.cpp \
 			src/cmd_grep.cpp \
@@ -17,9 +17,9 @@ xeert_SOURCES = \
 			src/render_text.cpp \
 			src/util.cpp \
 			src/x509_verify.cpp \
-			src/xeert.cpp
+			src/xfon.cpp
 
-xeert_CPPFLAGS = @OPENSSL_CFLAGS@
-xeert_LDADD = @OPENSSL_LIBS@
+xfon_CPPFLAGS = @OPENSSL_CFLAGS@
+xfon_LDADD = @OPENSSL_LIBS@
 
 SUBDIRS = test
