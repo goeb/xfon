@@ -5,6 +5,13 @@
 #include "oid_name.h"
 #include "x509_verify.h"
 
+std::string Certificate_with_links::get_file_location() const
+{
+    if (index_in_file < 0) return filename;
+    return filename + ":" + std::to_string(index_in_file);
+}
+
+
 /**
  * @brief is_issuer
  * @param cert_issuer
@@ -46,9 +53,9 @@ static bool is_issuer(const Certificate_with_links &cert_issuer, const Certifica
 
     // Verify signature
     if (!x509_verify_signature(cert_issuer, cert_child)) {
-        LOGERROR("Claimed issued certificate %s:%lu not verified by authority certificate %s:%lu",
-                 cert_child.filename.c_str(), cert_child.index_in_file,
-                 cert_issuer.filename.c_str(), cert_issuer.index_in_file);
+        LOGERROR("Claimed issued certificate %s not verified by authority certificate %s",
+                 cert_child.get_file_location().c_str(),
+                 cert_issuer.get_file_location().c_str());
         return false;
     }
 

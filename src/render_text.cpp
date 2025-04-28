@@ -68,7 +68,7 @@ std::string to_string(const Certificate_with_links &cert, const IndentationConte
     }
     result += indent_first_line + to_string(cert.tbs_certificate.subject) + "\n";
     result += indent_second_lines + cert.tbs_certificate.validity.not_before + " .. " + cert.tbs_certificate.validity.not_after + "\n";
-    result += indent_second_lines + cert.filename + ":" + std::to_string(cert.index_in_file) + "\n";
+    result += indent_second_lines + cert.get_file_location() + "\n";
     if (!cert.children.empty()) {
         result += indent_last_line + "─┬─────────────────────────────────────────────────────────────────\n";
     } else {

@@ -15,19 +15,19 @@ bool x509_verify_signature(const Certificate_with_links &cert_issuer, const Cert
     const unsigned char *der_bytes = cert_issuer.der_bytes.data();
     x509cert_issuer = d2i_X509(NULL, &der_bytes, cert_issuer.der_bytes.size());
     if (!x509cert_issuer) {
-        LOGERROR("d2i_X509: Cannot load certificate %s:%lu", cert_issuer.filename.c_str(), cert_issuer.index_in_file);
+        LOGERROR("d2i_X509: Cannot load certificate %s", cert_issuer.get_file_location().c_str());
         goto error;
     }
     der_bytes = cert_child.der_bytes.data();
     x509cert_child = d2i_X509(NULL, &der_bytes, cert_child.der_bytes.size());
     if (!x509cert_child) {
-        LOGERROR("d2i_X509: Cannot load certificate %s:%lu", cert_child.filename.c_str(), cert_child.index_in_file);
+        LOGERROR("d2i_X509: Cannot load certificate %s", cert_child.get_file_location().c_str());
         goto error;
     }
 
     pubkey = X509_get0_pubkey(x509cert_issuer);
     if (!pubkey) {
-        LOGERROR("X509_get0_pubkey: Cannot get public key of certficate %s:%lu", cert_issuer.filename.c_str(), cert_issuer.index_in_file);
+        LOGERROR("X509_get0_pubkey: Cannot get public key of certficate %s", cert_issuer.get_file_location().c_str());
         goto error;
     }
 

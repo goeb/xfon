@@ -223,6 +223,9 @@ int cmd_show(const std::list<std::string> &certificates_paths)
     if (certificates_paths.size() == 0) {
         // Take certificates from stdin
         err = load_cert_file(std::cin, "(stdin)", certificates);
+        if (certificates.size() == 1) {
+            certificates[0].index_in_file = -1;
+        }
 
     } else {
         for (auto cert_path : certificates_paths) {
@@ -232,8 +235,13 @@ int cmd_show(const std::list<std::string> &certificates_paths)
                 err = 1;
                 break;
             } else {
-                err = load_cert_file(ifs, cert_path.c_str(), certificates);
+                std::vector<Certificate_with_links> tmpcert;
+                err = load_cert_file(ifs, cert_path.c_str(), tmpcert);
                 if (err) break;
+                if (tmpcert.size() == 1) {
+                    tmpcert[0].index_in_file = -1;
+                }
+                certificates.insert(certificates.end(), tmpcert.begin(), tmpcert.end());
                 ifs.close();
             }
         }

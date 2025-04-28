@@ -9,6 +9,15 @@ Journal::Journal()
     max_level = LOG_WARNING;
 }
 
+static const char *level_prefix(int level)
+{
+    if (level == LOG_ERR) return "Error: ";
+    if (level == LOG_WARNING) return "Warning: ";
+    if (level == LOG_NOTICE) return "Notice: ";
+    if (level == LOG_INFO) return "Info: ";
+    return "";
+}
+
 void Journal::log(int level, const char *file, const char *func, const char *format, ...)
 {
     va_list ap;
@@ -36,7 +45,7 @@ void Journal::log(int level, const char *file, const char *func, const char *for
 
     if (level <= max_level) {
         if (level == LOG_DEBUG) fprintf(stderr, "%s: %s: ", file, func);
-        fprintf(stderr, "%s", ptr);
+        fprintf(stderr, "%s%s", level_prefix(level), ptr);
         fprintf(stderr, "\n");
     }
     free(ptr);
