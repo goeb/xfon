@@ -36,7 +36,24 @@ std::string to_string(const BasicConstraints &basic_constraints)
     return result;
 }
 
-std::string to_string(const Certificate_with_links &cert, const IndentationContext &indent_ctx)
+/*
+ * Format a node for a rich tree:
+ *
+ * │ country:YY, cn:Root YY
+ * │ 2025-04-25 20:03:10Z .. 2045-04-20 20:03:10Z
+ * │ ca-root.crt
+ * └──┬─────────────────────────────────────────────────────────────────
+ *    ├──┤ country:YY, cn:ca-level1-a
+ *    │  │ 2025-04-25 20:03:10Z .. 2045-04-20 20:03:10Z
+ *    │  │ ca-level1-a.crt
+ *    │  └──┬─────────────────────────────────────────────────────────────────
+ *    │     ├──┤ country:YY, cn:ca-level2-a
+ *    │     │  │ 2025-04-25 20:03:10Z .. 2045-04-20 20:03:10Z
+ *    │     │  │ ca-level2-a.crt
+ *    │     │  └────────────────────────────────────────────────────────────────────
+ * ...
+ */
+static std::string to_rich_node(const Certificate_with_links &cert, const IndentationContext &indent_ctx)
 {
     std::string result;
     size_t indent_level = indent_ctx.lineage.size();
@@ -85,9 +102,46 @@ std::string to_string(const Certificate_with_links &cert, const IndentationConte
     return result;
 }
 
+/**
+ * Format a node for a minimal tree:
+ *
+ * cn:Root YY (root.crt)
+ * ├── cn:level1-a (level1-a.crt)
+ * │   ├── cn:level2-a (level2-a.crt)
+ * │   └── cn:level2-b (level2-b.crt)
+ * │       └── cn:level3-a (level3-a.crt)
+ * └── cn:level1-b (level1-b.crt)
+ *     └── cn:level2-c (level2-c.crt)
+ */
+static std::string to_minimal_node(const Certificate_with_links &cert, const IndentationContext &indent_ctx)
+{
+    std::string result;
+    size_t indent_level = indent_ctx.lineage.size();
+    LOGDEBUG("indent_level=%lu", indent_level);
+    std::string indent_line;
+    if (indent_level) {
+        for (size_t i=0; i<indent_level-1; i++) {
+            indent_line += indent_ctx.lineage[i]?"│   ":"    ";
+        }
+        // do the last step, where first and second lines differ
+        if (indent_ctx.lineage[indent_level-1]) {
+            indent_line   += "├── ";
+        } else {
+            indent_line   += "└── ";
+        }
+    } else {
+        // This certificate has no parent
+        indent_line = "";
+    }
+    result += indent_line + to_string(cert.tbs_certificate.subject) + "(" + cert.get_file_location() + ")\n";
+
+    return result;
+}
+
+
 static void print_tree(const Certificate_with_links &cert, IndentationContext indentation_ctx)
 {
-    printf("%s", to_string(cert, indentation_ctx).c_str());
+    printf("%s", to_rich_node(cert, indentation_ctx).c_str());
 
     std::list<Certificate_with_links*>::const_iterator child;
     for (child=cert.children.begin(); child!=cert.children.end(); child++) {
