@@ -5,12 +5,11 @@
 #include <assert.h>
 
 #include "cli.h"
-#include "cmd_show.h"
+#include "cmd_tree.h"
 #include "hierarchy.h"
 #include "journal.h"
 #include "load.h"
 #include "render_text.h"
-
 
 static error_t parse_opt(int key, char* arg, struct argp_state* state)
 {
@@ -71,9 +70,9 @@ static char doc[] =
 static char args_doc[] = "CERT ...";
 
 /* Entry point for command line parsing */
-struct argp argp_show = { options, parse_opt, args_doc, doc };
+struct argp argp_tree = { options, parse_opt, args_doc, doc };
 
-int cmd_show(const std::list<std::string> &certificates_paths)
+int cmd_tree(const std::list<std::string> &certificates_paths)
 {
     std::vector<Certificate_with_links> certificates;
 
@@ -83,8 +82,8 @@ int cmd_show(const std::list<std::string> &certificates_paths)
 
     compute_hierarchy(certificates);
 
-    print_tree(certificates); // TODO do not print tree but flat structure
+    print_tree(certificates);
 
-    if (err) return 1;
-    return 0;
+    if (err) return EXIT_FAILURE;
+    return EXIT_SUCCESS;
 }

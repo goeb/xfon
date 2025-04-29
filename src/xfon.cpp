@@ -9,6 +9,7 @@
 #include "cli.h"
 #include "cmd_diff.h"
 #include "cmd_show.h"
+#include "cmd_tree.h"
 
 const char *argp_program_version = PACKAGE_VERSION;
 
@@ -17,8 +18,8 @@ int parse_cmd(struct argp_state* state, const char *cmd)
     struct argp *argp = 0;
     if (!cmd) return -1;
     else if (0 == strcmp(cmd, "diff")) argp = &argp_diff;
-    //else if (0 == strcmp(cmd, "grep")) argp = &argp_grep;
     else if (0 == strcmp(cmd, "show")) argp = &argp_show;
+    else if (0 == strcmp(cmd, "tree")) argp = &argp_tree;
     else return -1;
 
     struct arguments *arguments = (struct arguments *)state->input;
@@ -71,12 +72,12 @@ static char doc[] =
     "\n"
     "Supported commands:\n"
     "  diff    Compare two certificates\n"
-    "  grep    Search for patterns in certificates\n"
     "  show    Show contents of certificates\n"
+    "  tree    Print a tree of certificates\n"
     "\n"
     "Options:"
     "\v"
-    "See 'xeert <command> -h' to read about a specific <command>."
+    "See 'xfon <command> -h' to read about a specific <command>."
     ;
 
 static char args_doc[] = "<command> <args>";
@@ -95,9 +96,9 @@ int main(int argc, char **argv)
     argp_parse(&argp, argc, argv, ARGP_IN_ORDER, 0, &arguments);
 
     if (arguments.command == "show") return cmd_show(arguments.certificates_paths);
-    //else if (command == "show") return cmd_show(arguments.certificates_paths);
+    if (arguments.command == "tree") return cmd_tree(arguments.certificates_paths);
 
-    fprintf(stderr, "error invaid command: %s\n", arguments.command.c_str());
-    return 0;
+    fprintf(stderr, "error invalid command: %s\n", arguments.command.c_str());
+    return EXIT_FAILURE;
 }
 
