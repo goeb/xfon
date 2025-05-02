@@ -11,10 +11,15 @@
 #include "load.h"
 #include "render_text.h"
 
+struct Arguments {
+    std::string command;
+    std::list<std::string> certificates_paths;
+    Arguments() {printf("yyy\n");}
+};
 
 static error_t parse_opt(int key, char* arg, struct argp_state* state)
 {
-    struct arguments *arguments = (struct arguments *)state->input;
+    struct Arguments *arguments = (struct Arguments *)state->input;
     int level;
 
     switch(key) {
@@ -71,13 +76,17 @@ static char doc[] =
 static char args_doc[] = "CERT ...";
 
 /* Entry point for command line parsing */
-struct argp argp_show = { options, parse_opt, args_doc, doc };
+struct argp argp = { options, parse_opt, args_doc, doc };
 
-int cmd_show(const std::list<std::string> &certificates_paths)
+int cmd_show(int argc, char **argv)
 {
+    struct Arguments arguments;
+
+    argp_parse(&argp, argc, argv, ARGP_IN_ORDER, 0, &arguments);
+
     std::vector<Certificate_with_links> certificates;
 
-    int err = load_certificates(certificates_paths, certificates);
+    int err = load_certificates(arguments.certificates_paths, certificates);
 
     if (err) return 1;
 

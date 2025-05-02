@@ -7,6 +7,6 @@
 
 extern struct argp argp_tree;
 
-int cmd_tree(const std::list<std::string> &certificates_paths);
+int cmd_tree(int argc, char **argv);
 
 #endif

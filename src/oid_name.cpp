@@ -15,7 +15,7 @@ static const Oid OID_NAMES[] = {
     { "2.5.4.3", "id-at-commonName", "cn" },
     { "2.5.4.4", "id-at-surname", "sn" },
     { "2.5.4.5", "id-at-serialNumber", "serial" },
-    { "2.5.4.6", "id-at-countryName", "country" },
+    { "2.5.4.6", "id-at-countryName", "c" },
     { "2.5.4.7", "id-at-localityName", "l" },
     { "2.5.4.8", "id-at-stateOrProvinceName", "st" },
     { "2.5.4.10", "id-at-organizationName", "o" },

@@ -139,9 +139,10 @@ static std::string to_minimal_node(const Certificate_with_links &cert, const Ind
 }
 
 
-static void print_tree(const Certificate_with_links &cert, IndentationContext indentation_ctx)
+static void print_tree(const Certificate_with_links &cert, IndentationContext indentation_ctx, bool minimal)
 {
-    printf("%s", to_rich_node(cert, indentation_ctx).c_str());
+    if (minimal) printf("%s", to_minimal_node(cert, indentation_ctx).c_str());
+    else printf("%s", to_rich_node(cert, indentation_ctx).c_str());
 
     std::list<Certificate_with_links*>::const_iterator child;
     for (child=cert.children.begin(); child!=cert.children.end(); child++) {
@@ -154,7 +155,7 @@ static void print_tree(const Certificate_with_links &cert, IndentationContext in
         } else {
             indentation_ctx_child.lineage.push_back(true);
         }
-        print_tree(*(*child), indentation_ctx_child);
+        print_tree(*(*child), indentation_ctx_child, minimal);
     }
 }
 
@@ -167,13 +168,13 @@ static void print_tree(const Certificate_with_links &cert, IndentationContext in
  *   (circular dependencies have been broken)
  * - no certificate has 2 or more parents
  */
-void print_tree(const std::vector<Certificate_with_links> &certificates)
+void print_tree(const std::vector<Certificate_with_links> &certificates, bool minimal)
 {
     std::vector<Certificate_with_links>::const_iterator cert;
     IndentationContext indentation_ctx;
     for (cert=certificates.begin(); cert!=certificates.end(); cert++) {
         if (cert->parents.empty()) {
-            print_tree(*cert, indentation_ctx);
+            print_tree(*cert, indentation_ctx, minimal);
         }
     }
 }

@@ -16,6 +16,6 @@ std::string to_string(bool);
 std::string to_string(const BasicConstraints &);
 std::string to_string(const Certificate_with_links &cert, const IndentationContext &indent_ctx=IndentationContext());
 
-void print_tree(const std::vector<Certificate_with_links> &certificates);
+void print_tree(const std::vector<Certificate_with_links> &certificates, bool minimal=false);
 
 #endif // RENDER_TEXT_H

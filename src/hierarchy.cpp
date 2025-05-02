@@ -39,13 +39,17 @@ static bool is_issuer(const Certificate_with_links &cert_issuer, const Certifica
             auto skidit = cert_issuer.tbs_certificate.extensions.items.find(oid_get_id("id-ce-subjectKeyIdentifier"));
             if (skidit == cert_issuer.tbs_certificate.extensions.items.end()) {
                 // The issuer has no subjectKeyIdentifier
-                LOGERROR("Matching issuer/subject but non-matching authorityKeyIdentifier/subjectKeyIdentifier (1)");
+                LOGINFO("Issuer with no subjectKeyIdentifier (issuer %s, child %s)",
+                        cert_issuer.get_file_location().c_str(),
+                        cert_child.get_file_location().c_str());
                 return false;
             }
             SubjectKeyIdentifier skid = std::any_cast<SubjectKeyIdentifier>(skidit->second.extn_value);
             if (skid != akid.key_identifier) {
                 // Non-matching authorityKeyIdentifier/subjectKeyIdentifier
-                LOGERROR("Matching issuer/subject but non-matching authorityKeyIdentifier/subjectKeyIdentifier (2)");
+                LOGINFO("Issuer with different subjectKeyIdentifier (issuer %s, child %s)",
+                        cert_issuer.get_file_location().c_str(),
+                        cert_child.get_file_location().c_str());
                 return false;
             }
         }
@@ -53,7 +57,7 @@ static bool is_issuer(const Certificate_with_links &cert_issuer, const Certifica
 
     // Verify signature
     if (!x509_verify_signature(cert_issuer, cert_child)) {
-        LOGERROR("Claimed issued certificate %s not verified by authority certificate %s",
+        LOGERROR("Claimed child %s not verified by authority certificate %s",
                  cert_child.get_file_location().c_str(),
                  cert_issuer.get_file_location().c_str());
         return false;
