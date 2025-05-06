@@ -83,6 +83,8 @@ int cmd_tree(int argc, char **argv)
 
     if (err) return 1;
 
+    // TODO raise a warning if signaturealgo != tbssignaturealgo
+
     compute_hierarchy(certificates);
 
     print_tree(certificates, arguments.minimal);

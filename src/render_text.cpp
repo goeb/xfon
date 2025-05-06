@@ -36,6 +36,19 @@ std::string to_string(const BasicConstraints &basic_constraints)
     return result;
 }
 
+std::string to_string(const OctetString &bytes)
+{
+    return hexlify(bytes);
+}
+
+std::string to_string(const AlgorithmIdentifier &algo)
+{
+    std::string result = oid_get_name(algo.algorithm);
+    if (!algo.parameters.empty()) result += " (" + to_string(algo.parameters) + ")";
+    return result;
+}
+
+
 /*
  * Format a node for a rich tree:
  *
@@ -178,3 +191,38 @@ void print_tree(const std::vector<Certificate_with_links> &certificates, bool mi
         }
     }
 }
+
+
+static void print_property(const std::string &prefix, const char *name, const std::string &value)
+{
+    printf("%s%s: %s\n", prefix.c_str(), name, value.c_str());
+}
+
+void print_cert(const Certificate_with_links &certificate, bool single)
+{
+    Extensions extensions;
+    std::string prefix;
+    if (!single) prefix = certificate.get_file_location() + ": ";
+
+    print_property(prefix, "subject", to_string(certificate.tbs_certificate.subject));
+    print_property(prefix, "version", certificate.tbs_certificate.version);
+    print_property(prefix, "serial", certificate.tbs_certificate.serial_number);
+    print_property(prefix, "tbssignaturealgo", to_string(certificate.tbs_certificate.signature));
+    print_property(prefix, "issuer", to_string(certificate.tbs_certificate.issuer));
+    print_property(prefix, "notbefore", certificate.tbs_certificate.validity.not_before);
+    print_property(prefix, "notafter", certificate.tbs_certificate.validity.not_after);
+    print_property(prefix, "pubkeyalgo", to_string(certificate.tbs_certificate.subject_public_key_info.algorithm));
+    print_property(prefix, "pubkeybytes", to_string(certificate.tbs_certificate.subject_public_key_info.subject_public_key));
+    if (!certificate.tbs_certificate.issuer_unique_id.empty()) {
+        print_property(prefix, "pubkeybytes", to_string(certificate.tbs_certificate.issuer_unique_id));
+    }
+    if (!certificate.tbs_certificate.subject_unique_id.empty()) {
+        print_property(prefix, "pubkeybytes", to_string(certificate.tbs_certificate.subject_unique_id));
+    }
+    for (auto ext: certificate.tbs_certificate.extensions.items) {
+        print_property(prefix, "TODO", oid_get_name(ext.first, true));
+    }
+    print_property(prefix, "signaturealgo", to_string(certificate.signature_algorithm));
+    print_property(prefix, "signaturebytes", to_string(certificate.signature_value));
+}
+

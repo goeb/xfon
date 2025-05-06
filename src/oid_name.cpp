@@ -11,6 +11,14 @@ struct Oid {
 static const Oid OID_NAMES[] = {
     { "0.9.2342.19200300.100.1.1", "userid", "uid"},
     { "0.9.2342.19200300.100.1.25", "id-domainComponent", "dc" },
+    { "1.2.840.10045.2.1", "ecPublicKey", NULL },
+    { "1.2.840.10045.4.3.2", "ecdsa-with-SHA256", NULL },
+    { "1.2.840.10045.4.3.3", "ecdsa-with-SHA384", NULL },
+    { "1.2.840.113549.1.1.1", "rsaEncryption", NULL },
+    { "1.2.840.113549.1.1.5", "sha1-with-rsa-signature", NULL },
+    { "1.2.840.113549.1.1.11", "sha256WithRSAEncryption", NULL },
+    { "1.2.840.113549.1.1.12", "sha384WithRSAEncryption", NULL },
+    { "1.2.840.113549.1.1.13", "sha512WithRSAEncryption", NULL },
     { "1.2.840.113549.1.9.1", "id-emailAddress", "email" },
     { "2.5.4.3", "id-at-commonName", "cn" },
     { "2.5.4.4", "id-at-surname", "sn" },
@@ -57,7 +65,11 @@ std::string oid_get_name(const std::string &oid, bool shortname)
     const struct Oid *ptr_oid = OID_NAMES;
     while (ptr_oid->oid) {
         if (oid == ptr_oid->oid) {
-            return shortname?ptr_oid->short_name:ptr_oid->long_name;
+            if (shortname && ptr_oid->short_name) {
+                return ptr_oid->short_name;
+            } else {
+                return ptr_oid->long_name;
+            }
         }
         ptr_oid++;
     }

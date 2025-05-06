@@ -11,15 +11,14 @@
 #include "load.h"
 #include "render_text.h"
 
-struct Arguments {
+struct Arguments_show {
     std::string command;
     std::list<std::string> certificates_paths;
-    Arguments() {printf("yyy\n");}
 };
 
 static error_t parse_opt(int key, char* arg, struct argp_state* state)
 {
-    struct Arguments *arguments = (struct Arguments *)state->input;
+    struct Arguments_show *arguments = (struct Arguments_show *)state->input;
     int level;
 
     switch(key) {
@@ -80,7 +79,7 @@ struct argp argp = { options, parse_opt, args_doc, doc };
 
 int cmd_show(int argc, char **argv)
 {
-    struct Arguments arguments;
+    struct Arguments_show arguments;
 
     argp_parse(&argp, argc, argv, ARGP_IN_ORDER, 0, &arguments);
 
@@ -90,9 +89,10 @@ int cmd_show(int argc, char **argv)
 
     if (err) return 1;
 
-    compute_hierarchy(certificates);
-
-    print_tree(certificates); // TODO do not print tree but flat structure
+    bool single_cert = (certificates.size() == 1);
+    for (auto cert: certificates) {
+        print_cert(cert, single_cert);
+    }
 
     if (err) return 1;
     return 0;
