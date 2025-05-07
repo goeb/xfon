@@ -48,6 +48,130 @@ std::string to_string(const AlgorithmIdentifier &algo)
     return result;
 }
 
+std::string to_string(const std::set<std::string> &setstr, const std::string &separator)
+{
+    std::string result;
+    std::set<std::string>::const_iterator it;
+    for (it=setstr.begin(); it!=setstr.end(); it++) {
+        if (it != setstr.begin()) {
+            result += separator;
+        }
+        result += *it;
+    }
+    return result;
+}
+
+static std::string to_string(const GeneralNames &general_names)
+{
+    switch (general_names.type) {
+    case GeneralNames::TYPE_STR:
+        return general_names.stringvalue;
+    case GeneralNames::TYPE_NAME:
+        return to_string(general_names.namevalue);
+    case GeneralNames::TYPE_OTHER:
+        return to_string(general_names.othervalue);
+    default:
+        LOGERROR("Unexpected type of GeneralNames: %d", general_names.type);
+        return "(error)";
+    }
+}
+
+static std::string to_string(const AuthorityKeyIdentifier &akid)
+{
+    std::string result;
+    if (!akid.key_identifier.empty()) {
+        result += to_string(akid.key_identifier);
+    }
+    if (!akid.authority_cert_issuer.empty()) {
+        if (!result.empty()) result += ", ";
+        result += to_string(akid.authority_cert_issuer);
+    }
+    if (!akid.authority_cert_serial_number.empty()) {
+        if (!result.empty()) result += ", ";
+        result += "serial:" + akid.authority_cert_serial_number;
+    }
+    return result;
+}
+
+std::string to_string(const Extension &ext)
+{
+    std::string result;
+    std::string oid_name = oid_get_name(ext.extn_id);
+    if (oid_name == "id-ce-subjectKeyIdentifier") {
+        SubjectKeyIdentifier skid = std::any_cast<SubjectKeyIdentifier>(ext.extn_value);
+        return to_string(skid);
+    } else if (oid_name == "id-ce-keyUsage") {
+        KeyUsage key_usage = std::any_cast<KeyUsage>(ext.extn_value);
+        return to_string(key_usage, "|");
+    } else if (oid_name == "id-ce-privateKeyUsagePeriod") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-subjectAltName") {
+        GeneralNames general_names = std::any_cast<GeneralNames>(ext.extn_value);
+        return to_string(general_names);
+    } else if (oid_name == "id-ce-issuerAltName") {
+        GeneralNames general_names = std::any_cast<GeneralNames>(ext.extn_value);
+        return to_string(general_names);
+    } else if (oid_name == "id-ce-basicConstraints") {
+        BasicConstraints basic_constraints = std::any_cast<BasicConstraints>(ext.extn_value);
+        return to_string(basic_constraints);
+    } else if (oid_name == "id-ce-cRLNumber") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-cRLReasons") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-instructionCode") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-holdInstructionCode") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-invalidityDate") {
+        std::string value = std::any_cast<std::string>(ext.extn_value);
+        return value;
+    } else if (oid_name == "id-ce-issuingDistributionPoint") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-deltaCRLIndicator") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-issuingDistributionPoint") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-certificateIssuer") {
+        GeneralNames general_names = std::any_cast<GeneralNames>(ext.extn_value);
+        return to_string(general_names);
+    } else if (oid_name == "id-ce-nameConstraints") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-cRLDistributionPoints") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-certificatePolicies") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-policyMappings") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-authorityKeyIdentifier") {
+        AuthorityKeyIdentifier akid = std::any_cast<AuthorityKeyIdentifier>(ext.extn_value);
+        return to_string(akid);
+    } else if (oid_name == "id-ce-policyConstraints") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else if (oid_name == "id-ce-extKeyUsage") {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    } else {
+        OctetString value = std::any_cast<OctetString>(ext.extn_value);
+        return to_string(value);
+    }
+
+
+    if (ext.critical) result += " (critical)";
+    return result;
+}
 
 /*
  * Format a node for a rich tree:
@@ -220,7 +344,7 @@ void print_cert(const Certificate_with_links &certificate, bool single)
         print_property(prefix, "pubkeybytes", to_string(certificate.tbs_certificate.subject_unique_id));
     }
     for (auto ext: certificate.tbs_certificate.extensions.items) {
-        print_property(prefix, "TODO", oid_get_name(ext.first, true));
+        print_property(prefix, oid_get_name(ext.first, true).c_str(), to_string(ext.second));
     }
     print_property(prefix, "signaturealgo", to_string(certificate.signature_algorithm));
     print_property(prefix, "signaturebytes", to_string(certificate.signature_value));

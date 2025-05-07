@@ -36,6 +36,7 @@ struct GeneralNames {
     std::string stringvalue;
     Name namevalue;
     OctetString othervalue;
+    bool empty() const;
 };
 
 struct AuthorityKeyIdentifier {
