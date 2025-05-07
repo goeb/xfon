@@ -1,0 +1,7 @@
+#/bin/sh
+
+set -e
+
+cat "$srcdir"/set01/*.crt | ../xfon show > show-set01.out 2>&1
+
+diff show-set01.out "$srcdir"/set01/show.ref
