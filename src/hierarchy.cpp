@@ -116,6 +116,7 @@ static void break_loop(std::list<Certificate_with_links*> &loop)
         if ((*it)->parents.size() > (*target)->parents.size()) {
             target = it;
         }
+        LOGDEBUG("Cert %s has %lu parent(s)", (*it)->get_file_location().c_str(), (*it)->parents.size());
     }
     if ((*target)->parents.size() > 1) {
         // Remove the relationship with its parent that is also a member of the loop
@@ -190,6 +191,8 @@ void compute_hierarchy(std::vector<Certificate_with_links> &certs)
             }
             cert2++;
         }
+        LOGDEBUG("Cert %s has %lu parent(s)", cert1->get_file_location().c_str(), cert1->parents.size());
+
     }
 
     // Break circular loops
