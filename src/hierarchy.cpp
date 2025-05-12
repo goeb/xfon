@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <assert.h>
 
 #include "hierarchy.h"
@@ -90,6 +91,78 @@ static void prune_duplicates(std::vector<Certificate_with_links> &certificates)
     }
 }
 
+static void mark_issuer(Certificate_with_links &issuer, Certificate_with_links &issued)
+{
+    if (is_self_signed(issued)) {
+        LOGWARNING("Ignoring claimed issuer %s of self-signed certificate %s",
+                   issuer.get_file_location().c_str(), issued.get_file_location().c_str());
+    } else {
+        issuer.children.insert(&issued);
+        issued.parents.insert(&issuer);
+    }
+}
+
+static void break_loop(std::list<Certificate_with_links*> &loop)
+{
+    // Look for the relationship that should be destroyed
+    // 1. if some visited nodes have more than 1 parent, target the one with the most parents
+    // 2. else, if some visited nodes have more than 1 child, target the one with the most children
+    // 3. else (all have exactly 1 parent and 1 child), arbitrarily target the first one
+
+    // 1. Look for the node with the most parents
+    std::list<Certificate_with_links*>::iterator target = loop.begin();
+    std::list<Certificate_with_links*>::iterator it;
+    for (it=loop.begin(); it!=loop.end(); it++) {
+        if ((*it)->parents.size() > (*target)->parents.size()) {
+            target = it;
+        }
+    }
+    if ((*target)->parents.size() > 1) {
+        // Remove the relationship with its parent that is also a member of the loop
+        Certificate_with_links *previous;
+        if (target == loop.begin()) previous = loop.back();
+        else previous = *(std::prev(target));
+        LOGWARNING("Ignoring %s as a child of %s (circular dependency)",
+                   (*target)->get_file_location().c_str(), previous->get_file_location().c_str());
+        (*target)->parents.erase(previous);
+        previous->children.erase(*target);
+        return;
+    }
+
+    // 2.
+}
+
+static std::list<Certificate_with_links*> find_loop(Certificate_with_links *cert, std::list<Certificate_with_links*> visited_nodes)
+{
+    std::list<Certificate_with_links*> loop; // empty if no loop found
+    visited_nodes.push_back(cert);
+    for (auto child: cert->children) {
+        std::list<Certificate_with_links*>::iterator it = std::find(visited_nodes.begin(), visited_nodes.end(), child);
+        if (it != visited_nodes.end()) {
+            // Circular dependency detected
+            loop = std::list<Certificate_with_links*>(it, visited_nodes.end());
+            break;
+        } else {
+            // Recurse into the child
+            loop = find_loop(child, visited_nodes);
+            if (!loop.empty()) break;
+        }
+    }
+    return loop;
+}
+
+static void find_and_break_loops(std::vector<Certificate_with_links> &certs)
+{
+    for (auto cert: certs) {
+        while (1) {
+            std::list<Certificate_with_links*> visited_nodes;
+            std::list<Certificate_with_links*> loop = find_loop(&cert, visited_nodes);
+            if (loop.empty()) break;
+            else break_loop(loop);
+        }
+    }
+}
+
 /**
  * - Remove duplicates
  * - Draw parent-child relationships
@@ -98,6 +171,7 @@ static void prune_duplicates(std::vector<Certificate_with_links> &certificates)
  */
 void compute_hierarchy(std::vector<Certificate_with_links> &certs)
 {
+    LOGINFO("Computing tree of %lu certificates...", certs.size());
     // Remove duplicates
     prune_duplicates(certs);
 
@@ -108,20 +182,18 @@ void compute_hierarchy(std::vector<Certificate_with_links> &certs)
         for (cert2=cert1+1; cert2!=certs.end();) {
             if (is_issuer(*cert1, *cert2)) {
                 // cert1 is parent of cert2
-                cert1->children.push_back(&*cert2);
-                cert2->parents.push_back(&*cert1);
+                mark_issuer(*cert1, *cert2);
             }
             if (is_issuer(*cert2, *cert1)) {
                 // cert2 is parent of cert1
-                cert2->children.push_back(&*cert1);
-                cert1->parents.push_back(&*cert2);
+                mark_issuer(*cert2, *cert1);
             }
             cert2++;
         }
     }
 
     // Break circular loops
-    // - in favor the the longest lineage
+    find_and_break_loops(certs);
 
     // Remove multiple parents (eg: same authorities and keys, but different validity dates)
     // - in favor the the longest lineage
