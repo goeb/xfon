@@ -1,0 +1,7 @@
+#/bin/sh
+
+set -e
+
+../xfon show "$srcdir"/set05/ca-with-keyusage.crt | grep keyUsage > show-set05-keyusage.out 2>&1
+
+diff show-set05-keyusage.out "$srcdir"/set05/show-set05-keyusage.ref
