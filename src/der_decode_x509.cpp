@@ -219,13 +219,30 @@ static int der_decode_bit_string(const OctetString &der_bytes, std::vector<bool>
         return -1;
     }
 
+    // The first byte is the number of unused bits at the end of the remaining bits
     unsigned int unused_bits = value[0];
+    if (unused_bits > 7) {
+        LOGERROR("Invalid unused bits number %u (should be < 8)", unused_bits);
+        return -1;
+    }
+
     for (size_t i=1; i<size; i++) {
         unsigned char byte = value[i];
         // get the bits of this byte
-        for (size_t j=0; j<8-unused_bits; j++) {
-            bool bit = (byte >> (8-j-1)) & 0x1;
-            bits.insert(bits.end(), bit);
+        if (i == size-1) {
+            // This is the last byte. Consider the unused bits.
+            for (size_t j=0; j<8-unused_bits; j++) {
+                bool bit = (byte >> (8-j-1)) & 0x1;
+                //LOGDEBUG("(last-byte)bit=%d", bit);
+                bits.insert(bits.end(), bit);
+            }
+        } else {
+            // Not last byte. Take all 8 bits.
+            for (size_t j=0; j<8; j++) {
+                bool bit = (byte >> (8-j-1)) & 0x1;
+                //LOGDEBUG("bit=%d", bit);
+                bits.insert(bits.end(), bit);
+            }
         }
     }
 
@@ -744,13 +761,16 @@ static int der_decode_x509_key_usage(const OctetString &der_bytes, KeyUsage &key
         return -1;
     }
 
-    if (bits.size() > 9) {
-        LOGERROR("Bit string too long: %lu", bits.size());
-        return -1;
+    const size_t n_bits = bits.size();
+
+    if (n_bits > 9) {
+        LOGWARNING("Bit string more bits than expected: %lu (should be < 10)", n_bits);
     }
 
-    // pad with zeros to be sure to have 9 bits
-    bits.insert(bits.end(), 9 - bits.size(), 0);
+    if (n_bits < 9) {
+        // pad with zeros to be sure to have at least 9 bits
+        bits.insert(bits.end(), 9 - n_bits, 0);
+    }
 
     if (bits[0]) key_usage.insert("digitalSignature");
     if (bits[1]) key_usage.insert("nonRepudiation");
@@ -761,6 +781,13 @@ static int der_decode_x509_key_usage(const OctetString &der_bytes, KeyUsage &key
     if (bits[6]) key_usage.insert("cRLSign");
     if (bits[7]) key_usage.insert("encipherOnly");
     if (bits[8]) key_usage.insert("decipherOnly");
+    if (n_bits > 9) {
+        // Undocumented bits
+        for (size_t i=9; i < n_bits; i++) {
+            std::string keyusage_extra = "key-usage-extra-bit-" + std::to_string(i);
+            if (bits[i]) key_usage.insert(keyusage_extra);
+        }
+    }
 
     return n_bytes;
 }
