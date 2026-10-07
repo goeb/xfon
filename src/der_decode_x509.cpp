@@ -997,23 +997,29 @@ static int der_decode_x509_tbs_certificate(const OctetString &der_bytes, TBSCert
         return -1;
     }
 
-    // extract the EXPLICIT tag [0] of 'version'
-    OctetString version;
-    int n_bytes = der_decode_header(value, 0, version);
-    if (n_bytes < 0) {
-        LOGERROR("Cannot decode version explicit tag");
-        return -1;
+    if (!value.empty() && value[0] == 0xA0) {
+        // the optional field 'version' is present
+        // extract the EXPLICIT tag [0] (== 0xA0) of 'version'
+        OctetString version;
+        int n_bytes_hv = der_decode_header(value, 0, version);
+        if (n_bytes_hv < 0) {
+            LOGERROR("Cannot decode version explicit tag");
+            return -1;
+        }
+
+        int n_bytes_version = der_decode_integer(version, tbs_certificate.version);
+        if (n_bytes_version < 0) {
+            LOGERROR("cannot decode version");
+            return -1;
+        }
+
+        value.erase(0, n_bytes_hv);
+    } else {
+        // set the default value v1
+        tbs_certificate.version = "0x00";
     }
 
-    int n_bytes_version = der_decode_integer(version, tbs_certificate.version);
-    if (n_bytes_version < 0) {
-        LOGERROR("cannot decode version");
-        return -1;
-    }
-
-    value.erase(0, n_bytes);
-
-    n_bytes = der_decode_integer(value, tbs_certificate.serial_number);
+    int n_bytes = der_decode_integer(value, tbs_certificate.serial_number);
     if (n_bytes < 0) {
         LOGERROR("Cannot decode serial number");
         return -1;
