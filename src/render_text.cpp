@@ -173,6 +173,14 @@ std::string to_string(const Extension &ext)
     return result;
 }
 
+std::string to_string(const Version &version)
+{
+    if (version == "0x00") return "v1";
+    if (version == "0x01") return "v2";
+    if (version == "0x02") return "v3";
+    return "unknown-version:" + version;
+}
+
 /*
  * Format a node for a rich tree:
  *
@@ -330,7 +338,7 @@ void print_cert(const Certificate_with_links &certificate, bool single)
     if (!single) prefix = certificate.get_file_location() + ": ";
 
     print_property(prefix, "subject", to_string(certificate.tbs_certificate.subject));
-    print_property(prefix, "version", certificate.tbs_certificate.version);
+    print_property(prefix, "version", to_string(certificate.tbs_certificate.version));
     print_property(prefix, "serial", certificate.tbs_certificate.serial_number);
     print_property(prefix, "tbssignaturealgo", to_string(certificate.tbs_certificate.signature));
     print_property(prefix, "issuer", to_string(certificate.tbs_certificate.issuer));

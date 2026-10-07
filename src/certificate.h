@@ -12,11 +12,12 @@
 typedef std::string PropertyName;
 typedef std::string PropertyValue;
 typedef std::string ObjectIdentifier;
-typedef std::string Integer;
+typedef std::string Integer; // in hexadecimal notation (with sign and "0x" prefix)
 typedef std::string IA5String;
 typedef OctetString AnotherName;
 typedef OctetString KeyIdentifier;
 typedef Integer CertificateSerialNumber;
+typedef std::string Version; // version as an integer in hexadecimal (with "0x")
 
 struct AttributeTypeAndValue {
     ObjectIdentifier type;
@@ -88,7 +89,7 @@ struct SubjectPublicKeyInfo {
 };
 
 struct TBSCertificate {
-    Integer version;
+    Version version;
     Integer serial_number;
     AlgorithmIdentifier signature;
     Name issuer;

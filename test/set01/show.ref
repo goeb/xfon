@@ -1,5 +1,5 @@
 (stdin):0: subject: cn:level1-a
-(stdin):0: version: 0x02
+(stdin):0: version: v3
 (stdin):0: serial: 0x67908A8509C8378C7458ED6C172D547BD33EE475
 (stdin):0: tbssignaturealgo: ecdsa-with-SHA256
 (stdin):0: issuer: cn:root
@@ -13,7 +13,7 @@
 (stdin):0: signaturealgo: ecdsa-with-SHA256
 (stdin):0: signaturebytes: 0030450220481DA425F7F29F81B1A145D6738BBDFEB1BBA835AD722825B7CE786CACB590A5022100A7521EEAFA0114C7E603B79294A9748D7B8A33361B9D0D17A337B1D3BF33B04A
 (stdin):1: subject: cn:level1-b
-(stdin):1: version: 0x02
+(stdin):1: version: v3
 (stdin):1: serial: 0x1FA38296ED60832EE7CC77B80881825DCA2AC67B
 (stdin):1: tbssignaturealgo: ecdsa-with-SHA256
 (stdin):1: issuer: cn:root
@@ -27,7 +27,7 @@
 (stdin):1: signaturealgo: ecdsa-with-SHA256
 (stdin):1: signaturebytes: 00304402202E817BCEF9199B84C782CEC39D1DA0C3E788950C21BA03BFEDBD09E2663D1DFA02206E656EE7B15FBE0768E2C43BE327E27085C40E245F08686999F8E4516E781A2F
 (stdin):2: subject: cn:level2-a
-(stdin):2: version: 0x02
+(stdin):2: version: v3
 (stdin):2: serial: 0x61A99EA6755E0ED9837715798410FFBF56CF99FE
 (stdin):2: tbssignaturealgo: ecdsa-with-SHA256
 (stdin):2: issuer: cn:level1-a
@@ -41,7 +41,7 @@
 (stdin):2: signaturealgo: ecdsa-with-SHA256
 (stdin):2: signaturebytes: 003045022015A07C829ACBEF9D0628D1945DBF96385BBE58C211877C93AF47179343C97E520221008E9759F859E96973A33040DE03AB1DAE8DDBB2871B26017D6A58346BCF1FDBDF
 (stdin):3: subject: cn:level2-b
-(stdin):3: version: 0x02
+(stdin):3: version: v3
 (stdin):3: serial: 0x0C6B9345EFEFF533F81615D206F2BD82339FDFCF
 (stdin):3: tbssignaturealgo: ecdsa-with-SHA256
 (stdin):3: issuer: cn:level1-a
@@ -55,7 +55,7 @@
 (stdin):3: signaturealgo: ecdsa-with-SHA256
 (stdin):3: signaturebytes: 00304402206AA13E1BDE1E9A30AEC061924CAE2F54F18B29883CD00F1E1BA7BE7025A429E1022056F973B161038F20AD7BE844DBDE4AB6279D70642CE1746CCD592C1C9E096E43
 (stdin):4: subject: cn:level2-c
-(stdin):4: version: 0x02
+(stdin):4: version: v3
 (stdin):4: serial: 0x7B3FB2534C83091756EF885FE1F2612B63FF7BA0
 (stdin):4: tbssignaturealgo: ecdsa-with-SHA256
 (stdin):4: issuer: cn:level1-b
@@ -69,7 +69,7 @@
 (stdin):4: signaturealgo: ecdsa-with-SHA256
 (stdin):4: signaturebytes: 003046022100F77479FBC2E57F0BEA5B8CCB4A8E49FD4B3A3F0CCBB31524955F3E7DCF62AB2E022100FE8640C82A9CC74B8C7E41E628F3F464D21711CC86493979007278190CC52214
 (stdin):5: subject: cn:level3-a
-(stdin):5: version: 0x02
+(stdin):5: version: v3
 (stdin):5: serial: 0x176084A7C2F0EF6375396CD24C8C8006D9FAEF1A
 (stdin):5: tbssignaturealgo: ecdsa-with-SHA256
 (stdin):5: issuer: cn:level2-b
@@ -83,7 +83,7 @@
 (stdin):5: signaturealgo: ecdsa-with-SHA256
 (stdin):5: signaturebytes: 003045022100F6C116AE7902B2ED369DCAEE99E6DA977D8E1C96618F5345111256206A75A68002201BEAA148F588C615B07A399D4FC17FAB9945F2B1513BF2A6E89244144662A554
 (stdin):6: subject: cn:root
-(stdin):6: version: 0x02
+(stdin):6: version: v3
 (stdin):6: serial: 0x49BB09BF6C8C65AD84723C087D3017AC34A77FB0
 (stdin):6: tbssignaturealgo: ecdsa-with-SHA256
 (stdin):6: issuer: cn:root
